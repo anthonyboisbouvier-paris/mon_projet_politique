@@ -163,7 +163,7 @@ Installer la ponctuation :
 Lancer :
 
 ```python
-!python /content/app.py --input "https://www.youtube.com/watch?v=XXXX" \
+!python /content/app.py --input "https://www.youtube.com/watch?v=cTePa6vmeag" \
   --output /content/video_full.json \
   --num-speakers 2 --punctuate --export-srt --export-csv --export-md
 ```
