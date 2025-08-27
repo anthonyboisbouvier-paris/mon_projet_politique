@@ -2,22 +2,20 @@
 # -*- coding: utf-8 -*-
 """
 YouTube → transcript (VTT) complet + diarization (extrait ou full) [YTDLP-only]
-+ Anti-doublons VTT (par défaut)
-+ Export --export-srt / --export-csv
++ Anti-doublons VTT
++ Ponctuation & fusion micro-segments
++ Suppression des redites consécutives (même entre speakers)
++ Export --export-srt / --export-csv / --export-md
 
-Prérequis Colab :
-  - Runtime GPU (T4)
+Prérequis :
+  - ffmpeg dans le PATH
   - HUGGINGFACE_TOKEN défini (et terms pyannote acceptés)
-
-Modifs:
-  - Anti-doublons VTT : supprime les chevauchements de mots entre captions successives
-  - --export-srt : exporte un .srt basé sur les utterances (avec [SPEAKER_xx])
-  - --export-csv : exporte un .csv (start,end,speaker,text)
 """
 
 import argparse, json, os, re, shutil, subprocess, sys, tempfile, string
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from difflib import SequenceMatcher
 
 # ---------------- Logs ----------------
 def print_step(msg: str) -> None: print(f"[STEP] {msg}", flush=True)
@@ -47,7 +45,7 @@ def download_youtube_subs(url: str, out_dir: Path) -> Optional[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     ydl_opts = {
         "skip_download": True, "writesubtitles": True, "writeautomaticsub": True,
-        "subtitleslangs": ["fr","fr-FR","fr-CA"],  # FR only -> évite 429
+        "subtitleslangs": ["fr","fr-FR","fr-CA"],
         "subtitlesformat": "vtt",
         "noplaylist": True, "quiet": True, "no_warnings": True,
         "extractor_retries": 3, "sleep_interval_requests": 1,
@@ -72,14 +70,13 @@ def convert_to_wav_mono16k(src: Path, dst: Path, start: Optional[float] = None, 
     if p.returncode != 0: fail(f"Echec conversion audio (ffmpeg): {p.stderr[:400]}")
     return dst
 
-# ----------- VTT parsing ------------
+# ----------- VTT parsing + dedup ----
 def to_seconds(ts: str) -> float:
     ts = ts.replace(",", ".")
     h,m,s = ts.split(":")
     return int(h)*3600 + int(m)*60 + float(s)
 
 def parse_vtt_raw(vtt_path: Path) -> List[Dict[str,Any]]:
-    """Retourne une liste de cues bruts: [{start,end,text}]"""
     import webvtt
     cues=[]
     for cue in webvtt.read(str(vtt_path)):
@@ -88,19 +85,12 @@ def parse_vtt_raw(vtt_path: Path) -> List[Dict[str,Any]]:
         cues.append({"start": to_seconds(cue.start), "end": to_seconds(cue.end), "text": text})
     return cues
 
-# ---- Anti-doublons (overlap captions) ----
 _PUNCT_TABLE = str.maketrans({c: " " for c in string.punctuation + "’“”«»…—–"})
 def _norm_tok(t: str) -> str:
     return re.sub(r"\s+", " ", t.lower().translate(_PUNCT_TABLE)).strip()
-
 def _split_words(text: str) -> List[str]:
     return [w for w in _norm_tok(text).split() if w]
-
 def _dedup_concat_words(prev_words: List[str], new_words: List[str], max_overlap: int = 8) -> int:
-    """
-    Trouve le plus grand k (<= max_overlap) tel que les k derniers mots de prev == les k premiers mots de new.
-    Retourne k (le nb de mots à retirer en tête de new_words).
-    """
     max_k = min(max_overlap, len(prev_words), len(new_words))
     for k in range(max_k, 0, -1):
         if prev_words[-k:] == new_words[:k]:
@@ -109,57 +99,40 @@ def _dedup_concat_words(prev_words: List[str], new_words: List[str], max_overlap
 
 def build_clean_captions_and_words(vtt_path: Path, dedup: bool = True):
     """
-    Lit le VTT, enlève les répétitions inter-captions, renvoie:
-      - captions_clean: [{start,end,text}] avec textes nettoyés
-      - words_all: liste de mots horodatés approx. (répétitions supprimées)
-      - full_text: transcript complet sans répétitions
+    Enlève les répétitions inter-captions, renvoie:
+      - captions_clean: [{start,end,text}] (texte dédoublonné)
+      - words_all: mots horodatés approx.
+      - full_text: tout le texte sans répétitions
     """
     raw = parse_vtt_raw(vtt_path)
     captions_clean = []
     words_all: List[Dict[str,Any]] = []
     full_text_words: List[str] = []
 
-    for i, cue in enumerate(raw):
-        # mots de ce cue (normalisés pour l'overlap)
+    for cue in raw:
         cue_words_norm = _split_words(cue["text"])
-        if not cue_words_norm:
-            continue
+        if not cue_words_norm: continue
 
-        # Distribution des timestamps au sein du cue (approx linéaire)
         start, end = cue["start"], cue["end"]
         dur = max(1e-3, end - start)
         step = dur / max(1, len(cue_words_norm))
-        cue_words_timed = []
-        for j, w in enumerate(cue_words_norm):
-            ws = start + j*step
-            we = start + (j+1)*step
-            cue_words_timed.append({"start": ws, "end": we, "text": w})
+        cue_words_timed = [{"start": start + j*step, "end": start + (j+1)*step, "text": w}
+                           for j, w in enumerate(cue_words_norm)]
 
-        # anti-doublons vs. words_all (fin)
         if dedup and words_all:
-            prev_tail_norm = [x["text"] for x in words_all[-8:]]  # derniers mots déjà placés (normalisés)
-            k = _dedup_concat_words(prev_tail_norm, cue_words_norm, max_overlap=8)
+            prev_tail = [x["text"] for x in words_all[-8:]]
+            k = _dedup_concat_words(prev_tail, cue_words_norm, max_overlap=8)
         else:
             k = 0
 
-        # tronque la tête du cue selon le chevauchement détecté
         cue_words_timed = cue_words_timed[k:]
         cue_words_norm = cue_words_norm[k:]
-
-        # si tout a été mangé par le dedup → ne rien ajouter comme caption
         if not cue_words_timed:
             continue
 
-        # append aux words_all
         words_all.extend(cue_words_timed)
         full_text_words.extend(cue_words_norm)
-
-        # caption nettoyée (texte = mots restants du cue)
-        captions_clean.append({
-            "start": start,     # on garde les bornes originales (simple & stable)
-            "end": end,
-            "text": " ".join(cue_words_norm)
-        })
+        captions_clean.append({"start": start, "end": end, "text": " ".join(cue_words_norm)})
 
     full_text = " ".join(full_text_words)
     return captions_clean, words_all, full_text
@@ -204,7 +177,6 @@ def align_words_to_diarization(words: List[Dict[str, Any]], segs: List[Dict[str,
         return [{"speaker":"SPEAKER_00","start":words[0]["start"],"end":words[-1]["end"],"text":txt}]
 
     segs = sorted(segs, key=lambda s: (s["start"], s["end"]))
-
     def speaker_at(t: float) -> str:
         for s in segs:
             if s["start"] <= t <= s["end"]:
@@ -239,6 +211,81 @@ def align_words_to_diarization(words: List[Dict[str, Any]], segs: List[Dict[str,
             merged.append(u)
     return merged
 
+# ------------- Lisibilité -----------
+_PUNCT_MODEL = None
+def punctuate_text(text: str) -> str:
+    """Restaure ponctuation + majuscules. Fallback: retourne le texte brut."""
+    text = re.sub(r"\s+", " ", text.strip())
+    if not text: return text
+    try:
+        global _PUNCT_MODEL
+        if _PUNCT_MODEL is None:
+            from deepmultilingualpunctuation import PunctuationModel
+            _PUNCT_MODEL = PunctuationModel()
+        punct = _PUNCT_MODEL.restore_punctuation(text)
+    except Exception:
+        punct = text
+    parts = re.split(r'([\.!?…]+)\s*', punct)
+    rebuilt=[]
+    for i in range(0, len(parts), 2):
+        sent = parts[i].strip()
+        end = parts[i+1] if i+1 < len(parts) else ""
+        if sent:
+            sent = sent[0].upper() + sent[1:]
+            rebuilt.append(sent + (end if end else ""))
+    return " ".join(rebuilt).strip()
+
+def merge_short_utterances(utts, min_len_chars=60, max_gap_sec=0.8):
+    """Fusionne segments trop courts avec le suivant du même speaker (ou pause très courte)."""
+    if not utts: return utts
+    merged = [utts[0].copy()]
+    for u in utts[1:]:
+        last = merged[-1]
+        same_spk = (u["speaker"] == last["speaker"])
+        gap = max(0.0, u["start"] - last["end"])
+        if same_spk and (gap <= max_gap_sec or len(last["text"]) < min_len_chars):
+            last["text"] = (last["text"] + " " + u["text"]).strip()
+            last["end"] = u["end"]
+        else:
+            merged.append(u.copy())
+    return merged
+
+def _norm_for_compare(t: str) -> str:
+    t = t.lower().translate(_PUNCT_TABLE)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+def dedup_consecutive_repetitions(utts, sim_ratio=0.97, max_len=140):
+    """
+    Supprime les redites consécutives même si speakers différents.
+    - supprime u[i] si u[i] ~ u[i-1] (texte quasi identique)
+    - plus agressif pour les courtes répliques (<= max_len)
+    """
+    if not utts: return utts
+    pruned = [utts[0].copy()]
+    for u in utts[1:]:
+        prev = pruned[-1]
+        a = _norm_for_compare(prev["text"])
+        b = _norm_for_compare(u["text"])
+        similar = False
+        if a and b:
+            if a == b:
+                similar = True
+            else:
+                r = SequenceMatcher(None, a, b).ratio()
+                if r >= sim_ratio:
+                    similar = True
+                # cas "echo" très court : b inclus dans a ou inverse
+                if not similar and (len(a) <= max_len or len(b) <= max_len):
+                    if a in b or b in a:
+                        similar = True
+        if similar:
+            # on garde le premier; on peut éventuellement étendre l'intervalle
+            prev["end"] = max(prev["end"], u["end"])
+        else:
+            pruned.append(u.copy())
+    return pruned
+
 # ------------- Exports --------------
 def _fmt_srt(t: float) -> str:
     ms = int(round((t - int(t)) * 1000))
@@ -260,6 +307,17 @@ def export_csv(utterances: List[Dict[str,Any]], out_path: Path) -> None:
             w.writerow([u["start"], u["end"], u["speaker"], u["text"]])
     print_check(f"CSV écrit: {out_path.resolve()}")
 
+def export_markdown(utterances: List[Dict[str,Any]], out_path: Path) -> None:
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("# Transcript nettoyé\n\n")
+        current=None
+        for u in utterances:
+            if u["speaker"] != current:
+                current = u["speaker"]
+                f.write(f"\n## {current}\n\n")
+            f.write(u["text"].strip() + " ")
+    print_check(f"Markdown écrit: {out_path.resolve()}")
+
 # ------------- Helpers --------------
 def parse_hhmmss(s: Optional[str]) -> Optional[float]:
     if not s: return None
@@ -273,7 +331,7 @@ def parse_hhmmss(s: Optional[str]) -> Optional[float]:
 
 # ---------------- Main --------------
 def main() -> None:
-    parser=argparse.ArgumentParser(description="YouTube → VTT complet (anti-doublons) + diarization + exports")
+    parser=argparse.ArgumentParser(description="YouTube → VTT (anti-doublons) + diarization + lisibilité + exports")
     parser.add_argument("--input", type=str, help="URL YouTube")
     parser.add_argument("--output", type=str, default="result.json", help="Chemin du JSON de sortie")
     parser.add_argument("--healthcheck", action="store_true", help="Vérifie l'environnement")
@@ -281,8 +339,13 @@ def main() -> None:
     parser.add_argument("--duration", type=int, default=None, help="Durée en secondes de l'extrait à diariser")
     parser.add_argument("--num-speakers", type=int, default=None, help="Fixer le nombre de locuteurs")
     parser.add_argument("--no-dedup-vtt", action="store_true", help="Désactive l'anti-doublons VTT")
+    parser.add_argument("--punctuate", action="store_true", help="Restaure la ponctuation des utterances")
+    parser.add_argument("--min-utt-chars", type=int, default=60, help="Fusionne les segments trop courts (<N chars)")
+    parser.add_argument("--merge-gap-sec", type=float, default=0.8, help="Fusion si pause <= N secondes")
+    parser.add_argument("--no-cross-dedup", action="store_true", help="Ne pas supprimer les redites consécutives entre speakers")
     parser.add_argument("--export-srt", action="store_true", help="Écrit un .srt (utterances)")
     parser.add_argument("--export-csv", action="store_true", help="Écrit un .csv (utterances)")
+    parser.add_argument("--export-md", action="store_true", help="Écrit un .md lisible (paragraphes par speaker)")
     args=parser.parse_args()
 
     if args.healthcheck:
@@ -330,7 +393,7 @@ def main() -> None:
         # 5) Restreindre les mots à l'extrait (si fourni)
         if start_sec is not None and args.duration is not None:
             end_sec=start_sec+args.duration
-            words_clip=[w for w in words_all if start_sec <= (w["start"]+w["end"])/2.0 <= end_sec]
+            words_clip=[w for w in words_all if start_sec <= (w["start"]+w["end"]) / 2.0 <= end_sec]
         else:
             words_clip=words_all
         print_check(f"{len(words_clip)} 'mots' à aligner.")
@@ -343,11 +406,25 @@ def main() -> None:
         utterances=align_words_to_diarization(words_clip, spk_segments)
         print_check(f"{len(utterances)} blocs speaker+texte.")
 
-        # 8) JSON
+        # 8) Lisibilité (ponctuation, fusion, anti-redites consécutives)
+        if args.punctuate:
+            for u in utterances:
+                u["text"] = punctuate_text(u["text"])
+        utterances = merge_short_utterances(
+            utterances,
+            min_len_chars=args.min_utt_chars,
+            max_gap_sec=args.merge_gap_sec
+        )
+        if not args.no_cross_dedup:
+            utterances = dedup_consecutive_repetitions(utterances)
+
+        # 9) JSON
         out=Path(args.output); out.parent.mkdir(parents=True, exist_ok=True)
         result={"source": args.input,
                 "params":{"start": args.start,"duration": args.duration,"num_speakers": args.num_speakers,
-                          "dedup_vtt": not args.no_dedup_vtt},
+                          "dedup_vtt": not args.no_dedup_vtt, "punctuate": args.punctuate,
+                          "min_utt_chars": args.min_utt_chars, "merge_gap_sec": args.merge_gap_sec,
+                          "cross_dedup": not args.no_cross_dedup},
                 "transcript":{"captions": captions, "text": full_text},
                 "utterances": utterances,
                 "summary":{"num_captions": len(captions),"num_words_all": len(words_all),
@@ -356,12 +433,14 @@ def main() -> None:
         with open(out,"w",encoding="utf-8") as f: json.dump(result,f,ensure_ascii=False,indent=2)
         print_check(f"JSON écrit: {out.resolve()}")
 
-        # 9) Exports optionnels
+        # 10) Exports optionnels
         base = out.with_suffix("")
         if args.export_srt:
             export_srt(utterances, base.with_suffix(".srt"))
         if args.export_csv:
             export_csv(utterances, base.with_suffix(".csv"))
+        if args.export_md:
+            export_markdown(utterances, base.with_suffix(".md"))
 
         print("Terminé ✅")
 
