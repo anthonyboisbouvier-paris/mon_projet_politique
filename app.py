@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 """
-YouTube → VTT FR (YTDLP-only) → Diarization (pyannote) → JSON (+ SRT / CSV / MD)
+app.py — YouTube → VTT FR (YTDLP-only) → Diarization (pyannote) → JSON (+ SRT / CSV / MD)
 
 Option B (sans Whisper) pour supprimer les "méga redites" :
 1) Anti-reprises VTT (containment + similarité), garde la version la plus complète.
-2) "Delta-cut" après diarization : si un bloc répète un précédent, on retire le préfixe commun, on garde le nouveau.
+2) "Delta-cut" logique post-diarization (via préfixes communs) incluse dans la dédup.
 3) Mémoire n-gram courte : rejette les blocs quasi-identiques dans une fenêtre de temps.
 
 Dépendances: yt-dlp, webvtt-py, pyannote.audio, torch, ffmpeg
@@ -242,6 +242,7 @@ def parse_vtt_captions(vtt_path: Path,
                 # garder la plus "complète" (plus de tokens)
                 if len(_tokenize(cur["text"])) >= len(_tokenize(prev["text"])):
                     buffer[i] = cur
+                    drop_cur = True  # IMPORTANT: évite d'ajouter cur une 2e fois
                 else:
                     drop_cur = True
                 break
@@ -399,7 +400,7 @@ def dedup_utterances(utts: List[Dict[str, Any]],
     """
     Agressif cross-speaker:
       - similarité + containment contre les blocs récents (fenêtre 'window_sec')
-      - delta-cut : si répétition, on retire le plus long préfixe commun (on garde la partie nouvelle)
+      - delta-cut (préfixe commun retiré) si répétition
       - mémoire n-gram : rejette si quasi rien de nouveau
     """
     out: List[Dict[str, Any]] = []
@@ -422,7 +423,6 @@ def dedup_utterances(utts: List[Dict[str, Any]],
             if s >= sim or contain >= 0.75:
                 # delta-cut : enlève le plus long préfixe commun (en tokens)
                 lcp = _longest_common_prefix_tokens(v["text"], utext)
-                vtoks = _tokenize(v["text"])
                 utoks = _tokenize(utext)
                 new_tail = " ".join(utoks[lcp:])
                 new_tail = compress_repeats_inside_text(new_tail)
