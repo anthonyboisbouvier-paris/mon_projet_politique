@@ -4,13 +4,16 @@
 """
 app.py — YouTube → VTT FR (YTDLP-only) → Diarization (pyannote) → JSON (+ SRT / CSV / MD)
 
-Option B (sans Whisper) pour supprimer les "méga redites" :
-1) Anti-reprises VTT (containment + similarité), garde la version la plus complète.
-2) "Delta-cut" logique post-diarization (via préfixes communs) incluse dans la dédup.
-3) Mémoire n-gram courte : rejette les blocs quasi-identiques dans une fenêtre de temps.
+Points clés :
+- Télécharge d'abord les sous-titres MANUELS (FR). Si absents → fallback AUTO (FR).
+- Nettoyage "rolling captions" côté VTT (containment + similarité) → garde la version la plus complète.
+- Diarization (pyannote/speaker-diarization-3.1).
+- Dédup post-diarization "delta-cut" (préfixe commun retiré) + mémoire n-gram (anti quasi-reprises).
+- Exports : JSON / SRT / CSV / Markdown.
+- Option --input-vtt pour fournir un VTT déjà pré-nettoyé (ex: n8n), sans re-télécharger.
 
-Dépendances: yt-dlp, webvtt-py, pyannote.audio, torch, ffmpeg
-Optionnel (ponctuation): deepmultilingualpunctuation
+Dépendances (pip) : yt-dlp, webvtt-py, pyannote.audio>=3.1.1, torch, ffmpeg (binaire)
+Optionnel (ponctuation) : deepmultilingualpunctuation
 """
 
 from __future__ import annotations
@@ -151,28 +154,54 @@ def download_youtube_audio(url: str, out_dir: Path) -> Path:
     return Path(downloaded)
 
 def download_youtube_subs(url: str, out_dir: Path) -> Optional[Path]:
+    """
+    Tente d'abord les sous-titres MANUELS FR, puis retombe sur les AUTO FR.
+    Retourne le VTT choisi ou None.
+    """
     from yt_dlp import YoutubeDL, utils
+
+    def _run(automatic: bool) -> Optional[Path]:
+        # automatic=False => MANUELS seulement ; automatic=True => AUTO seulement
+        ydl_opts = {
+            "skip_download": True,
+            "writesubtitles": not automatic,
+            "writeautomaticsub": automatic,
+            "subtitleslangs": ["fr", "fr-FR", "fr-CA"],
+            "subtitlesformat": "vtt",
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "extractor_retries": 3,
+            "sleep_interval_requests": 1,
+            "outtmpl": str(out_dir / "%(title).200s.%(ext)s"),
+        }
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                ydl.extract_info(url, download=True)
+        except utils.DownloadError:
+            return None
+
+        candidates = sorted(out_dir.glob("*.vtt"))
+        if not candidates:
+            return None
+
+        # Score : favorise "fr" exact / variantes FR ; pénalise toute mention d’auto
+        def score(p: Path) -> tuple:
+            name = p.name.lower()
+            manual_bias = 0 if ("auto" in name or "automatic" in name) else -1
+            fr_exact = 0 if name.endswith(".fr.vtt") else 1
+            fr_any = 0 if (".fr-" in name or "-fr." in name) else 1
+            return (manual_bias, fr_exact, fr_any, len(name))
+        return sorted(candidates, key=score)[0]
+
     out_dir.mkdir(parents=True, exist_ok=True)
-    ydl_opts = {
-        "skip_download": True,
-        "writesubtitles": True,
-        "writeautomaticsub": True,
-        "subtitleslangs": ["fr", "fr-FR", "fr-CA"],  # FR only → limite 429
-        "subtitlesformat": "vtt",
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "extractor_retries": 3,
-        "sleep_interval_requests": 1,
-        "outtmpl": str(out_dir / "%(title).200s.%(ext)s"),
-    }
-    try:
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.extract_info(url, download=True)
-    except utils.DownloadError:
-        return None
-    vtts = sorted(out_dir.glob("*.vtt"))
-    return vtts[0] if vtts else None
+
+    # 1) MANUELS d'abord
+    vtt = _run(automatic=False)
+    if vtt:
+        return vtt
+    # 2) Fallback AUTO
+    return _run(automatic=True)
 
 # -------------- Audio (ffmpeg) ----------------
 
@@ -199,13 +228,12 @@ def parse_vtt_captions(vtt_path: Path,
                        near_sim: float = 0.92,
                        contain_thr: float = 0.75) -> List[Dict[str, Any]]:
     """
-    Anti-reprises VTT ('rolling captions'):
+    Anti-reprises VTT ("rolling captions"):
     - dans une fenêtre near_window (s), si B ~ A (similarité) OU B contient fortement A,
-      on ne garde qu'une version (la plus complète).
+      garder une seule version (la plus complète).
     """
     import webvtt
     if not dedup_vtt:
-        # mode simple : sans dédup
         caps = []
         for cue in webvtt.read(str(vtt_path)):
             text = " ".join(cue.text.strip().split())
@@ -215,7 +243,7 @@ def parse_vtt_captions(vtt_path: Path,
             caps.append({"start": start, "end": end, "text": compress_repeats_inside_text(text)})
         return caps
 
-    buffer = deque()     # captions récentes dans la fenêtre
+    buffer = deque()
     kept: List[Dict[str, Any]] = []
 
     for cue in webvtt.read(str(vtt_path)):
@@ -225,24 +253,24 @@ def parse_vtt_captions(vtt_path: Path,
         start, end = to_seconds(cue.start), to_seconds(cue.end)
         text = compress_repeats_inside_text(raw)
 
-        # purge du buffer (hors fenêtre)
+        # purge buffer (hors fenêtre)
         while buffer and start - buffer[0]["end"] > near_window:
             kept.append(buffer.popleft())
 
         cur = {"start": start, "end": end, "text": text}
         drop_cur = False
 
-        # compare avec les captions dans la fenêtre
+        # compare dans la fenêtre
         for i in range(len(buffer)-1, -1, -1):
             prev = buffer[i]
             sim = _similar(prev["text"], cur["text"])
             contain = _containment_ratio(prev["text"], cur["text"])
 
             if sim >= near_sim or contain >= contain_thr:
-                # garder la plus "complète" (plus de tokens)
+                # on garde la plus "complète" (plus de tokens)
                 if len(_tokenize(cur["text"])) >= len(_tokenize(prev["text"])):
                     buffer[i] = cur
-                    drop_cur = True  # IMPORTANT: évite d'ajouter cur une 2e fois
+                    drop_cur = True  # << évite l'ajout d'un doublon après remplacement
                 else:
                     drop_cur = True
                 break
@@ -255,7 +283,7 @@ def parse_vtt_captions(vtt_path: Path,
     return kept
 
 def parse_vtt_to_words(vtt_path: Path) -> List[Dict[str, Any]]:
-    """Découpe chaque caption en tokens « approximativement horodatés »."""
+    """Découpe chaque caption en tokens approximativement horodatés."""
     import webvtt
     words: List[Dict[str, Any]] = []
     for cue in webvtt.read(str(vtt_path)):
@@ -551,6 +579,9 @@ def main() -> None:
     p.add_argument("--dedup-ngram", type=int, default=5, help="Taille n-gram pour nouveauté")
     p.add_argument("--dedup-novelty", type=float, default=0.20, help="Ratio de nouveauté minimal (0-1)")
 
+    # Ingestion d'un VTT externe (ex: sorti de n8n)
+    p.add_argument("--input-vtt", type=str, default=None, help="Chemin vers un fichier .vtt pré-nettoyé (bypass yt-dlp)")
+
     # Exports
     p.add_argument("--export-srt", action="store_true")
     p.add_argument("--export-csv", action="store_true")
@@ -574,27 +605,36 @@ def main() -> None:
         print_check("Healthcheck terminé ✅")
         sys.exit(0)
 
-    if not args.input:
-        fail("--input requis (sauf --healthcheck).")
-    if not is_url(args.input):
-        fail("--input doit être une URL YouTube (YTDLP-only).")
+    if not args.input and not args.input_vtt:
+        fail("--input (URL YouTube) requis OU --input-vtt (fichier .vtt).")
 
     ensure_ffmpeg()
 
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
 
-        # 1) Audio
-        print_step("Téléchargement audio YouTube...")
-        media_path = download_youtube_audio(args.input, tmp)
-        print_check(f"Fichier téléchargé: {media_path.name}")
+        # 1) Audio (si URL fournie)
+        media_path = None
+        if args.input:
+            if not is_url(args.input):
+                fail("--input doit être une URL YouTube (YTDLP-only).")
+            print_step("Téléchargement audio YouTube...")
+            media_path = download_youtube_audio(args.input, tmp)
+            print_check(f"Fichier téléchargé: {media_path.name}")
 
-        # 2) VTT FR
-        print_step("Récupération des sous-titres .vtt (FR)...")
-        vtt = download_youtube_subs(args.input, tmp)
-        if vtt is None:
-            fail("Pas de sous-titres FR disponibles (YTDLP-only).")
-        print_check(f"Sous-titres trouvés: {vtt.name}")
+        # 2) VTT FR (depuis --input-vtt OU download)
+        if args.input_vtt:
+            vtt_path = Path(args.input_vtt)
+            if not vtt_path.exists():
+                fail(f"--input-vtt introuvable: {vtt_path}")
+            print_step("Utilisation du VTT fourni (--input-vtt)...")
+            vtt = vtt_path
+        else:
+            print_step("Récupération des sous-titres .vtt (FR)...")
+            vtt = download_youtube_subs(args.input, tmp)  # manuel→auto
+            if vtt is None:
+                fail("Pas de sous-titres FR (manuels ni auto) disponibles.")
+            print_check(f"Sous-titres trouvés: {vtt.name}")
 
         captions = parse_vtt_captions(
             vtt,
@@ -607,6 +647,9 @@ def main() -> None:
         full_text = " ".join(c["text"] for c in captions)
 
         # 3) Audio 16k mono (extrait si demandé)
+        if media_path is None:
+            # Si on n'a pas d'URL, on ne peut pas faire de diarization (nécessite audio)
+            fail("Diarization impossible sans audio source. Fournis --input (YouTube) si tu veux la diarization.")
         start_sec = parse_hhmmss(args.start) if args.start else None
         wav_path = tmp / "audio_16k_mono.wav"
         print_step("Conversion en WAV mono 16k...")
@@ -644,7 +687,7 @@ def main() -> None:
         out_json = Path(args.output)
         export_json(
             out_json,
-            src_url=args.input,
+            src_url=args.input or f"vtt:{vtt}",
             params={
                 "start": args.start,
                 "duration": args.duration,
@@ -661,6 +704,7 @@ def main() -> None:
                 "dedup_sim": args.dedup_sim,
                 "dedup_ngram": args.dedup_ngram,
                 "dedup_novelty": args.dedup_novelty,
+                "input_vtt": str(vtt) if args.input_vtt else None,
             },
             captions=captions,
             full_text=full_text,
