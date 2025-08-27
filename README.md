@@ -167,15 +167,18 @@ Lancer :
   --output /content/video_full.json \
   --num-speakers 2 --punctuate --export-srt --export-csv --export-md
 ```
-Full vidéo + export SRT/CSV/MD + anti-redites agressif :
 
-python app.py \
-  --input "https://www.youtube.com/watch?v=cTePa6vmeag" \
-  --output outputs/json/video_full.json \
+RUN agressif (nettoyage + ponctuation + fusion + anti-redites fortes + exports)
+YOUTUBE_URL = "https://www.youtube.com/watch?v=cTePa6vmeag"  # ← remplace par ton URL
+
+!python /content/app.py \
+  --input "{YOUTUBE_URL}" \
+  --output /content/video_full.json \
   --num-speakers 2 \
   --punctuate --export-srt --export-csv --export-md \
   --min-utt-chars 80 --merge-gap-sec 1.0 \
   --dedup-strong --dedup-window 8 --dedup-sim 0.92
+Les fichiers générés (video_full.json, .srt, .csv, .md) apparaissent dans le panneau Fichiers de Colab (/content). Tu peux les télécharger directement.
 
 ---
 
