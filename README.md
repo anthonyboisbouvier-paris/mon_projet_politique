@@ -167,6 +167,15 @@ Lancer :
   --output /content/video_full.json \
   --num-speakers 2 --punctuate --export-srt --export-csv --export-md
 ```
+Full vidéo + export SRT/CSV/MD + anti-redites agressif :
+
+python app.py \
+  --input "https://www.youtube.com/watch?v=cTePa6vmeag" \
+  --output outputs/json/video_full.json \
+  --num-speakers 2 \
+  --punctuate --export-srt --export-csv --export-md \
+  --min-utt-chars 80 --merge-gap-sec 1.0 \
+  --dedup-strong --dedup-window 8 --dedup-sim 0.92
 
 ---
 
