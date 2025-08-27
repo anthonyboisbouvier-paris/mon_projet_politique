@@ -1,0 +1,18 @@
+﻿# Python
+__pycache__/
+*.pyc
+
+# Environnements / IDE
+.venv/
+venv/
+.vscode/
+.ipynb_checkpoints/
+
+# Données volumineuses/générées
+outputs/
+*.webm
+*.wav
+*.vtt
+
+# Secrets
+.env
