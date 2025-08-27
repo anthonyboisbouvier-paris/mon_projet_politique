@@ -163,27 +163,12 @@ Installer la ponctuation :
 Lancer :
 
 ```python
-!python /content/app.py --input "https://www.youtube.com/watch?v=cTePa6vmeag" \
-  --output /content/video_full.json \
-  --num-speakers 2 --punctuate --export-srt --export-csv --export-md
-```
+!python app.py \
+  --input "https://www.youtube.com/watch?v=cTePa6vmeag" \
+  --output outputs/json/jancovici_full.json \
+  --subs-lang "fr,fr-FR,fr-CA" \
+  --num-speakers 2
 
-# 4) RUN agressif (full vidéo)
-YOUTUBE_URL = "https://www.youtube.com/watch?v=cTePa6vmeag"  # ← change si besoin
-
-!python /content/app.py \
-  --input "{YOUTUBE_URL}" \
-  --output /content/video_full.json \
-  --num-speakers 2 \
-  --punctuate --export-srt --export-csv --export-md \
-  --min-utt-chars 80 --merge-gap-sec 1.0 \
-  --dedup-window 12 --dedup-sim 0.88 \
-  --vtt-window 5 --vtt-sim 0.92 --vtt-contain 0.75
-Si tu veux rendre le filtre plus ou moins strict :
-
-plus strict (moins de redites) → augmente --dedup-window (p.ex. 14) et/ou --dedup-sim (0.90–0.94).
-
-moins strict (préserve plus de redites naturelles) → diminue ces seuils.
 
 ---
 
