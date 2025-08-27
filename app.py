@@ -1,40 +1,129 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-YouTube → transcript (VTT) complet + diarization (extrait ou full) [YTDLP-only]
-+ Anti-doublons VTT
-+ Ponctuation & fusion micro-segments
-+ Suppression des redites consécutives (même entre speakers)
-+ Export --export-srt / --export-csv / --export-md
 
-Prérequis :
-  - ffmpeg dans le PATH
-  - HUGGINGFACE_TOKEN défini (et terms pyannote acceptés)
+"""
+YouTube → VTT FR (YTDLP-only) → Diarization (pyannote) → JSON (+SRT/CSV/MD)
+
+- Télécharge audio + sous-titres .vtt (FR) avec yt-dlp
+- Nettoyage VTT (anti-doublons)
+- Diarization (pyannote/speaker-diarization-3.1) avec token HF
+- Alignement mots↔locuteurs, ponctuation (optionnel), fusion micro-segments
+- Anti-redites cross-speaker (optionnel, agressif)
+- Exports JSON (+ SRT / CSV / Markdown)
+
+Dépendances clés : yt-dlp, webvtt-py, pyannote.audio, torch, ffmpeg
+Optionnel ponctuation : deepmultilingualpunctuation
 """
 
-import argparse, json, os, re, shutil, subprocess, sys, tempfile, string
+from __future__ import annotations
+
+import argparse
+import csv
+import difflib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unicodedata
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-from difflib import SequenceMatcher
+from typing import Any, Dict, List, Optional
 
-# ---------------- Logs ----------------
-def print_step(msg: str) -> None: print(f"[STEP] {msg}", flush=True)
-def print_check(msg: str) -> None: print(f"[CHECK] {msg}", flush=True)
-def fail(msg: str, code: int = 1) -> None: print(f"[ERROR] {msg}", file=sys.stderr, flush=True); sys.exit(code)
+# ------------------------ Logs ------------------------
 
-# -------------- Sanity ---------------
+def print_step(msg: str) -> None:
+    print(f"[STEP] {msg}", flush=True)
+
+def print_check(msg: str) -> None:
+    print(f"[CHECK] {msg}", flush=True)
+
+def fail(msg: str, code: int = 1) -> None:
+    print(f"[ERROR] {msg}", file=sys.stderr, flush=True)
+    sys.exit(code)
+
+# ------------------ Sanity/Helpers --------------------
+
 def ensure_ffmpeg() -> None:
-    if shutil.which("ffmpeg") is None: fail("ffmpeg non trouvé dans le PATH")
+    if shutil.which("ffmpeg") is None:
+        fail("ffmpeg non trouvé dans le PATH.")
 
 def is_url(s: str) -> bool:
     return s.startswith("http://") or s.startswith("https://")
 
-# ------------ yt-dlp I/O -------------
+def to_seconds(ts: str) -> float:
+    ts = ts.replace(",", ".")
+    h, m, s = ts.split(":")
+    return int(h) * 3600 + int(m) * 60 + float(s)
+
+def hhmmss(ts: float) -> str:
+    ms = int(round((ts - int(ts)) * 1000))
+    s = int(ts) % 60
+    m = (int(ts) // 60) % 60
+    h = int(ts) // 3600
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+def parse_hhmmss(s: Optional[str]) -> Optional[float]:
+    if not s:
+        return None
+    s = s.strip()
+    parts = s.split(":")
+    if len(parts) == 3:
+        h, m, sec = parts
+        return int(h) * 3600 + int(m) * 60 + float(sec)
+    if len(parts) == 2:
+        m, sec = parts
+        return int(m) * 60 + float(sec)
+    return float(s)
+
+# --- Texte utils (dédup & normalisation) ---
+
+FILLERS_FR = {
+    "euh","bah","ben","hein","du coup","voilà","en fait","je veux dire",
+    "comment dire","j'ai envie de dire","entre guillemets"
+}
+
+def _strip_accents(s: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+
+def _norm_text(s: str) -> str:
+    s = s.lower()
+    s = _strip_accents(s)
+    for f in sorted(FILLERS_FR, key=len, reverse=True):
+        s = re.sub(rf"\b{re.escape(f)}\b", " ", s)
+    s = re.sub(r"[^\w\s']", " ", s, flags=re.UNICODE)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+def _similar(a: str, b: str) -> float:
+    return difflib.SequenceMatcher(None, _norm_text(a), _norm_text(b)).ratio()
+
+def compress_repeats_inside_text(text: str, max_ngram: int = 6) -> str:
+    """Supprime répétitions adjacentes (A B C A B C …) & compacte espaces."""
+    t = text
+    for n in range(max_ngram, 1, -1):
+        pat = re.compile(rf"(\b(?:\w+\s+){{{n-1}}}\w+\b)(?:\s+\1)+", re.IGNORECASE | re.UNICODE)
+        while True:
+            new = pat.sub(r"\1", t)
+            if new == t:
+                break
+            t = new
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+# -------------------- yt-dlp I/O ----------------------
+
 def download_youtube_audio(url: str, out_dir: Path) -> Path:
     from yt_dlp import YoutubeDL
     out_dir.mkdir(parents=True, exist_ok=True)
-    ydl_opts = {"format": "bestaudio/best","outtmpl": str(out_dir / "%(title).200s.%(ext)s"),
-                "noplaylist": True,"quiet": True,"no_warnings": True}
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": str(out_dir / "%(title).200s.%(ext)s"),
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+    }
     with YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         downloaded = ydl.prepare_filename(info)
@@ -44,11 +133,16 @@ def download_youtube_subs(url: str, out_dir: Path) -> Optional[Path]:
     from yt_dlp import YoutubeDL, utils
     out_dir.mkdir(parents=True, exist_ok=True)
     ydl_opts = {
-        "skip_download": True, "writesubtitles": True, "writeautomaticsub": True,
-        "subtitleslangs": ["fr","fr-FR","fr-CA"],
+        "skip_download": True,
+        "writesubtitles": True,
+        "writeautomaticsub": True,
+        "subtitleslangs": ["fr", "fr-FR", "fr-CA"],
         "subtitlesformat": "vtt",
-        "noplaylist": True, "quiet": True, "no_warnings": True,
-        "extractor_retries": 3, "sleep_interval_requests": 1,
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+        "extractor_retries": 3,
+        "sleep_interval_requests": 1,
         "outtmpl": str(out_dir / "%(title).200s.%(ext)s"),
     }
     try:
@@ -59,100 +153,82 @@ def download_youtube_subs(url: str, out_dir: Path) -> Optional[Path]:
     vtts = sorted(out_dir.glob("*.vtt"))
     return vtts[0] if vtts else None
 
-# ----------- Audio (ffmpeg) ----------
-def convert_to_wav_mono16k(src: Path, dst: Path, start: Optional[float] = None, duration: Optional[int] = None) -> Path:
+# ----------------- Audio (ffmpeg) ---------------------
+
+def convert_to_wav_mono16k(src: Path, dst: Path,
+                           start: Optional[float] = None,
+                           duration: Optional[int] = None) -> Path:
     cmd = ["ffmpeg", "-y"]
-    if start is not None: cmd += ["-ss", str(start)]
+    if start is not None:
+        cmd += ["-ss", str(start)]
     cmd += ["-i", str(src)]
-    if duration is not None: cmd += ["-t", str(duration)]
-    cmd += ["-ac","1","-ar","16000","-vn", str(dst)]
+    if duration is not None:
+        cmd += ["-t", str(duration)]
+    cmd += ["-ac", "1", "-ar", "16000", "-vn", str(dst)]
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    if p.returncode != 0: fail(f"Echec conversion audio (ffmpeg): {p.stderr[:400]}")
+    if p.returncode != 0:
+        fail(f"Echec conversion audio (ffmpeg): {p.stderr[:400]}")
     return dst
 
-# ----------- VTT parsing + dedup ----
-def to_seconds(ts: str) -> float:
-    ts = ts.replace(",", ".")
-    h,m,s = ts.split(":")
-    return int(h)*3600 + int(m)*60 + float(s)
+# --------------- VTT parsing -------------------------
 
-def parse_vtt_raw(vtt_path: Path) -> List[Dict[str,Any]]:
+def parse_vtt_captions(vtt_path: Path,
+                       dedup_vtt: bool = True,
+                       near_window: float = 3.0,
+                       near_sim: float = 0.92) -> List[Dict[str, Any]]:
     import webvtt
-    cues=[]
+    caps: List[Dict[str, Any]] = []
+    last_kept = None
     for cue in webvtt.read(str(vtt_path)):
         text = " ".join(cue.text.strip().split())
-        if not text: continue
-        cues.append({"start": to_seconds(cue.start), "end": to_seconds(cue.end), "text": text})
-    return cues
-
-_PUNCT_TABLE = str.maketrans({c: " " for c in string.punctuation + "’“”«»…—–"})
-def _norm_tok(t: str) -> str:
-    return re.sub(r"\s+", " ", t.lower().translate(_PUNCT_TABLE)).strip()
-def _split_words(text: str) -> List[str]:
-    return [w for w in _norm_tok(text).split() if w]
-def _dedup_concat_words(prev_words: List[str], new_words: List[str], max_overlap: int = 8) -> int:
-    max_k = min(max_overlap, len(prev_words), len(new_words))
-    for k in range(max_k, 0, -1):
-        if prev_words[-k:] == new_words[:k]:
-            return k
-    return 0
-
-def build_clean_captions_and_words(vtt_path: Path, dedup: bool = True):
-    """
-    Enlève les répétitions inter-captions, renvoie:
-      - captions_clean: [{start,end,text}] (texte dédoublonné)
-      - words_all: mots horodatés approx.
-      - full_text: tout le texte sans répétitions
-    """
-    raw = parse_vtt_raw(vtt_path)
-    captions_clean = []
-    words_all: List[Dict[str,Any]] = []
-    full_text_words: List[str] = []
-
-    for cue in raw:
-        cue_words_norm = _split_words(cue["text"])
-        if not cue_words_norm: continue
-
-        start, end = cue["start"], cue["end"]
-        dur = max(1e-3, end - start)
-        step = dur / max(1, len(cue_words_norm))
-        cue_words_timed = [{"start": start + j*step, "end": start + (j+1)*step, "text": w}
-                           for j, w in enumerate(cue_words_norm)]
-
-        if dedup and words_all:
-            prev_tail = [x["text"] for x in words_all[-8:]]
-            k = _dedup_concat_words(prev_tail, cue_words_norm, max_overlap=8)
-        else:
-            k = 0
-
-        cue_words_timed = cue_words_timed[k:]
-        cue_words_norm = cue_words_norm[k:]
-        if not cue_words_timed:
+        if not text:
             continue
+        start, end = to_seconds(cue.start), to_seconds(cue.end)
+        if dedup_vtt and last_kept and (start - last_kept["end"]) <= near_window:
+            if _similar(text, last_kept["text"]) >= near_sim:
+                continue
+        clean = compress_repeats_inside_text(text)
+        item = {"start": start, "end": end, "text": clean}
+        caps.append(item)
+        last_kept = item
+    return caps
 
-        words_all.extend(cue_words_timed)
-        full_text_words.extend(cue_words_norm)
-        captions_clean.append({"start": start, "end": end, "text": " ".join(cue_words_norm)})
+def parse_vtt_to_words(vtt_path: Path) -> List[Dict[str, Any]]:
+    """Découpe chaque caption en tokens «à plat» (approx horodatés)."""
+    import webvtt
+    words: List[Dict[str, Any]] = []
+    for cue in webvtt.read(str(vtt_path)):
+        text = " ".join(cue.text.strip().split())
+        if not text:
+            continue
+        start, end = to_seconds(cue.start), to_seconds(cue.end)
+        toks = text.split()
+        dur = max(1e-3, end - start)
+        step = dur / len(toks)
+        for i, tok in enumerate(toks):
+            ws = start + i * step
+            we = start + (i + 1) * step
+            words.append({"start": ws, "end": we, "text": tok})
+    return words
 
-    full_text = " ".join(full_text_words)
-    return captions_clean, words_all, full_text
+# ---------------- Diarization ------------------------
 
-# ------------- Diarization ----------
 def diarize_pyannote(wav_path: Path, num_speakers: Optional[int] = None) -> List[Dict[str, Any]]:
-    hf_token = os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_TOKEN")
-    if not hf_token: fail("HUGGINGFACE_TOKEN/HF_TOKEN non défini.")
+    token = os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_TOKEN")
+    if not token:
+        fail("HUGGINGFACE_TOKEN/HF_TOKEN manquant (crée un token sur Hugging Face et exporte la variable).")
     try:
         import torch
         from pyannote.audio import Pipeline
     except ImportError:
-        fail("pyannote.audio manquant. pip install 'pyannote.audio>=3.1.1'")
+        fail("pyannote.audio manquant. Installe-le (pip install 'pyannote.audio>=3.1.1').")
 
     print_step("Diarization (pyannote.audio)...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     try:
         pipeline = Pipeline.from_pretrained(
             "pyannote/speaker-diarization-3.1",
-            use_auth_token=hf_token
+            use_auth_token=token
         ).to(device)
         print_check(f"pyannote device: {device.type}")
     except Exception as e:
@@ -160,194 +236,224 @@ def diarize_pyannote(wav_path: Path, num_speakers: Optional[int] = None) -> List
         print("TRACEBACK:\n", traceback.format_exc())
         fail(f"Echec chargement pipeline: {e}")
 
-    infer_args = {"audio": str(wav_path)}
-    diar = pipeline(infer_args, num_speakers=num_speakers) if num_speakers is not None else pipeline(infer_args)
+    infer = {"audio": str(wav_path)}
+    diar = pipeline(infer, num_speakers=num_speakers) if num_speakers is not None else pipeline(infer)
 
-    segs = [{"start": float(t.start), "end": float(t.end), "speaker": spk}
-            for t, _, spk in diar.itertracks(yield_label=True)]
-    segs.sort(key=lambda x: x["start"])
+    segs: List[Dict[str, Any]] = [
+        {"start": float(turn.start), "end": float(turn.end), "speaker": speaker}
+        for turn, _, speaker in diar.itertracks(yield_label=True)
+    ]
+    segs.sort(key=lambda s: (s["start"], s["end"]))
     print_check(f"Diarization ok. {len(segs)} segments.")
     return segs
 
-# ------------- Alignement -----------
-def align_words_to_diarization(words: List[Dict[str, Any]], segs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    if not words: return []
+# ------------- Alignement mots → speaker --------------
+
+def align_words_to_diarization(words: List[Dict[str, Any]],
+                               segs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not words:
+        return []
     if not segs:
         txt = " ".join(w["text"] for w in words).strip()
-        return [{"speaker":"SPEAKER_00","start":words[0]["start"],"end":words[-1]["end"],"text":txt}]
+        return [{"speaker": "SPEAKER_00", "start": words[0]["start"], "end": words[-1]["end"], "text": txt}]
 
     segs = sorted(segs, key=lambda s: (s["start"], s["end"]))
+
     def speaker_at(t: float) -> str:
         for s in segs:
             if s["start"] <= t <= s["end"]:
                 return s["speaker"]
-        nearest = min(segs, key=lambda s: min(abs(s["start"]-t), abs(s["end"]-t)))
+        # si hors segment, on prend le plus proche
+        nearest = min(segs, key=lambda s: min(abs(s["start"] - t), abs(s["end"] - t)))
         return nearest["speaker"]
 
-    utt=[]; cur_spk=None; cur_start=None; buf=[]
+    utt: List[Dict[str, Any]] = []
+    cur_spk = None
+    cur_start: Optional[float] = None
+    buf: List[str] = []
+
     for w in words:
-        mid = (w["start"]+w["end"])/2.0
+        mid = (w["start"] + w["end"]) / 2.0
         spk = speaker_at(mid)
         if cur_spk is None:
             cur_spk, cur_start, buf = spk, w["start"], [w["text"]]
         elif spk == cur_spk:
             buf.append(w["text"])
         else:
-            text = re.sub(r"\s+"," "," ".join(buf)).strip()
+            text = re.sub(r"\s+", " ", " ".join(buf)).strip()
             if text:
-                utt.append({"speaker":cur_spk,"start":float(cur_start),"end":float(w["start"]),"text":text})
+                utt.append({"speaker": cur_spk, "start": float(cur_start), "end": float(w["start"]), "text": text})
             cur_spk, cur_start, buf = spk, w["start"], [w["text"]]
-    if buf:
-        text = re.sub(r"\s+"," "," ".join(buf)).strip()
-        utt.append({"speaker":cur_spk,"start":float(cur_start),"end":float(words[-1]["end"]),"text":text})
 
-    # fusion consécutifs du même speaker
-    merged=[]
+    if buf:
+        text = re.sub(r"\s+", " ", " ".join(buf)).strip()
+        utt.append({"speaker": cur_spk, "start": float(cur_start), "end": float(words[-1]["end"]), "text": text})
+
+    # fusion consécutifs (même locuteur)
+    merged: List[Dict[str, Any]] = []
     for u in utt:
-        if merged and merged[-1]["speaker"]==u["speaker"]:
-            merged[-1]["text"]=(merged[-1]["text"]+" "+u["text"]).strip()
-            merged[-1]["end"]=u["end"]
+        if merged and merged[-1]["speaker"] == u["speaker"]:
+            merged[-1]["text"] = (merged[-1]["text"] + " " + u["text"]).strip()
+            merged[-1]["end"] = u["end"]
         else:
             merged.append(u)
     return merged
 
-# ------------- Lisibilité -----------
-_PUNCT_MODEL = None
-def punctuate_text(text: str) -> str:
-    """Restaure ponctuation + majuscules. Fallback: retourne le texte brut."""
-    text = re.sub(r"\s+", " ", text.strip())
-    if not text: return text
-    try:
-        global _PUNCT_MODEL
-        if _PUNCT_MODEL is None:
-            from deepmultilingualpunctuation import PunctuationModel
-            _PUNCT_MODEL = PunctuationModel()
-        punct = _PUNCT_MODEL.restore_punctuation(text)
-    except Exception:
-        punct = text
-    parts = re.split(r'([\.!?…]+)\s*', punct)
-    rebuilt=[]
-    for i in range(0, len(parts), 2):
-        sent = parts[i].strip()
-        end = parts[i+1] if i+1 < len(parts) else ""
-        if sent:
-            sent = sent[0].upper() + sent[1:]
-            rebuilt.append(sent + (end if end else ""))
-    return " ".join(rebuilt).strip()
+# ---------------- Post-traitements --------------------
 
-def merge_short_utterances(utts, min_len_chars=60, max_gap_sec=0.8):
-    """Fusionne segments trop courts avec le suivant du même speaker (ou pause très courte)."""
-    if not utts: return utts
-    merged = [utts[0].copy()]
-    for u in utts[1:]:
-        last = merged[-1]
-        same_spk = (u["speaker"] == last["speaker"])
-        gap = max(0.0, u["start"] - last["end"])
-        if same_spk and (gap <= max_gap_sec or len(last["text"]) < min_len_chars):
-            last["text"] = (last["text"] + " " + u["text"]).strip()
-            last["end"] = u["end"]
+def apply_punctuation_if_needed(utterances: List[Dict[str, Any]], enabled: bool) -> List[Dict[str, Any]]:
+    if not enabled or not utterances:
+        return utterances
+    try:
+        from deepmultilingualpunctuation import PunctuationModel
+        model = PunctuationModel()
+    except Exception as e:
+        print_check(f"Ponctuation ignorée (modèle non dispo) : {e}")
+        return utterances
+    for u in utterances:
+        u["text"] = model.restore_punctuation(u["text"])
+    return utterances
+
+def merge_micro_segments(utterances: List[Dict[str, Any]],
+                         min_chars: int = 60,
+                         merge_gap_sec: float = 0.8) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for u in utterances:
+        u["text"] = compress_repeats_inside_text(u["text"])
+        if out:
+            prev = out[-1]
+            if (u["speaker"] == prev["speaker"] and
+                (u["start"] - prev["end"]) <= merge_gap_sec and
+                (len(prev["text"]) < min_chars or len(u["text"]) < min_chars)):
+                prev["text"] = compress_repeats_inside_text((prev["text"] + " " + u["text"]).strip())
+                prev["end"] = u["end"]
+                continue
+        out.append(u)
+    return out
+
+def dedup_utterances(utts: List[Dict[str, Any]],
+                     window_sec: float = 7.0,
+                     sim: float = 0.90,
+                     prefer_longer: bool = True) -> List[Dict[str, Any]]:
+    """Supprime blocs quasi identiques (même ou autre speaker) dans une fenêtre temporelle."""
+    out: List[Dict[str, Any]] = []
+    for u in utts:
+        keep = True
+        utext = compress_repeats_inside_text(u["text"])
+        u["text"] = utext
+        for v in reversed(out):
+            if u["start"] - v["end"] > window_sec:
+                break
+            if _similar(utext, v["text"]) >= sim:
+                if prefer_longer and len(utext) <= len(v["text"]):
+                    keep = False
+                else:
+                    out.remove(v)
+                break
+        if keep:
+            out.append(u)
+
+    # fusion (encore) pour mêmes speakers très proches
+    merged: List[Dict[str, Any]] = []
+    for u in out:
+        if merged and merged[-1]["speaker"] == u["speaker"] and (u["start"] - merged[-1]["end"]) <= 0.8:
+            merged[-1]["text"] = compress_repeats_inside_text((merged[-1]["text"] + " " + u["text"]).strip())
+            merged[-1]["end"] = u["end"]
         else:
-            merged.append(u.copy())
+            merged.append(u)
     return merged
 
-def _norm_for_compare(t: str) -> str:
-    t = t.lower().translate(_PUNCT_TABLE)
-    t = re.sub(r"\s+", " ", t).strip()
-    return t
+# ------------------- Exports -------------------------
 
-def dedup_consecutive_repetitions(utts, sim_ratio=0.97, max_len=140):
-    """
-    Supprime les redites consécutives même si speakers différents.
-    - supprime u[i] si u[i] ~ u[i-1] (texte quasi identique)
-    - plus agressif pour les courtes répliques (<= max_len)
-    """
-    if not utts: return utts
-    pruned = [utts[0].copy()]
-    for u in utts[1:]:
-        prev = pruned[-1]
-        a = _norm_for_compare(prev["text"])
-        b = _norm_for_compare(u["text"])
-        similar = False
-        if a and b:
-            if a == b:
-                similar = True
-            else:
-                r = SequenceMatcher(None, a, b).ratio()
-                if r >= sim_ratio:
-                    similar = True
-                # cas "echo" très court : b inclus dans a ou inverse
-                if not similar and (len(a) <= max_len or len(b) <= max_len):
-                    if a in b or b in a:
-                        similar = True
-        if similar:
-            # on garde le premier; on peut éventuellement étendre l'intervalle
-            prev["end"] = max(prev["end"], u["end"])
-        else:
-            pruned.append(u.copy())
-    return pruned
+def export_json(path: Path,
+                src_url: str,
+                params: Dict[str, Any],
+                captions: List[Dict[str, Any]],
+                full_text: str,
+                utterances: List[Dict[str, Any]],
+                diag_segments_count: int) -> None:
+    result = {
+        "source": src_url,
+        "params": params,
+        "transcript": {
+            "captions": captions,
+            "text": full_text
+        },
+        "utterances": utterances,
+        "summary": {
+            "num_captions": len(captions),
+            "num_words_clip": sum(len(u["text"].split()) for u in utterances),
+            "num_speaker_segments": diag_segments_count,
+            "num_utterances": len(utterances),
+        },
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
 
-# ------------- Exports --------------
-def _fmt_srt(t: float) -> str:
-    ms = int(round((t - int(t)) * 1000))
-    h = int(t//3600); m = int((t%3600)//60); s = int(t%60)
-    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
-
-def export_srt(utterances: List[Dict[str,Any]], out_path: Path) -> None:
-    with open(out_path, "w", encoding="utf-8") as srt:
+def export_srt(path: Path, utterances: List[Dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
         for i, u in enumerate(utterances, 1):
-            srt.write(f"{i}\n{_fmt_srt(u['start'])} --> {_fmt_srt(u['end'])}\n[{u['speaker']}] {u['text']}\n\n")
-    print_check(f"SRT écrit: {out_path.resolve()}")
+            f.write(f"{i}\n{hhmmss(u['start'])} --> {hhmmss(u['end'])}\n")
+            f.write(f"[{u['speaker']}] {u['text']}\n\n")
 
-def export_csv(utterances: List[Dict[str,Any]], out_path: Path) -> None:
-    import csv
-    with open(out_path, "w", encoding="utf-8", newline="") as f:
+def export_csv(path: Path, utterances: List[Dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["start_sec","end_sec","speaker","text"])
+        w.writerow(["start_sec", "end_sec", "speaker", "text"])
         for u in utterances:
-            w.writerow([u["start"], u["end"], u["speaker"], u["text"]])
-    print_check(f"CSV écrit: {out_path.resolve()}")
+            w.writerow([f"{u['start']:.3f}", f"{u['end']:.3f}", u["speaker"], u["text"]])
 
-def export_markdown(utterances: List[Dict[str,Any]], out_path: Path) -> None:
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write("# Transcript nettoyé\n\n")
-        current=None
+def export_md(path: Path, utterances: List[Dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        cur = None
+        buf: List[str] = []
+        def flush():
+            nonlocal buf
+            if buf:
+                f.write(" ".join(buf).strip() + "\n\n")
+                buf = []
         for u in utterances:
-            if u["speaker"] != current:
-                current = u["speaker"]
-                f.write(f"\n## {current}\n\n")
-            f.write(u["text"].strip() + " ")
-    print_check(f"Markdown écrit: {out_path.resolve()}")
+            if u["speaker"] != cur:
+                flush()
+                cur = u["speaker"]
+                f.write(f"### {cur}\n\n")
+            buf.append(u["text"])
+        flush()
 
-# ------------- Helpers --------------
-def parse_hhmmss(s: Optional[str]) -> Optional[float]:
-    if not s: return None
-    s=s.strip()
-    parts=s.split(":")
-    if len(parts)==3:
-        h,m,sec=parts; return int(h)*3600+int(m)*60+float(sec)
-    if len(parts)==2:
-        m,sec=parts; return int(m)*60+float(sec)
-    return float(s)
+# ---------------------- Main -------------------------
 
-# ---------------- Main --------------
 def main() -> None:
-    parser=argparse.ArgumentParser(description="YouTube → VTT (anti-doublons) + diarization + lisibilité + exports")
-    parser.add_argument("--input", type=str, help="URL YouTube")
-    parser.add_argument("--output", type=str, default="result.json", help="Chemin du JSON de sortie")
-    parser.add_argument("--healthcheck", action="store_true", help="Vérifie l'environnement")
-    parser.add_argument("--start", type=str, default=None, help="Début HH:MM:SS ou MM:SS de l'extrait à diariser")
-    parser.add_argument("--duration", type=int, default=None, help="Durée en secondes de l'extrait à diariser")
-    parser.add_argument("--num-speakers", type=int, default=None, help="Fixer le nombre de locuteurs")
-    parser.add_argument("--no-dedup-vtt", action="store_true", help="Désactive l'anti-doublons VTT")
-    parser.add_argument("--punctuate", action="store_true", help="Restaure la ponctuation des utterances")
-    parser.add_argument("--min-utt-chars", type=int, default=60, help="Fusionne les segments trop courts (<N chars)")
-    parser.add_argument("--merge-gap-sec", type=float, default=0.8, help="Fusion si pause <= N secondes")
-    parser.add_argument("--no-cross-dedup", action="store_true", help="Ne pas supprimer les redites consécutives entre speakers")
-    parser.add_argument("--export-srt", action="store_true", help="Écrit un .srt (utterances)")
-    parser.add_argument("--export-csv", action="store_true", help="Écrit un .csv (utterances)")
-    parser.add_argument("--export-md", action="store_true", help="Écrit un .md lisible (paragraphes par speaker)")
-    args=parser.parse_args()
+    p = argparse.ArgumentParser(description="YouTube → VTT FR (YTDLP-only) + Diarization (pyannote) → JSON")
+    p.add_argument("--input", type=str, required=False, help="URL YouTube")
+    p.add_argument("--output", type=str, default="result.json", help="Chemin du JSON de sortie")
+    p.add_argument("--healthcheck", action="store_true", help="Vérifie l'environnement et quitte")
+    p.add_argument("--start", type=str, default=None, help="Début HH:MM:SS ou MM:SS de l'extrait à diariser")
+    p.add_argument("--duration", type=int, default=None, help="Durée en secondes de l'extrait à diariser")
+    p.add_argument("--num-speakers", type=int, default=None, help="Forcer N locuteurs (optionnel)")
 
+    # Lisibilité / fusion
+    p.add_argument("--punctuate", action="store_true", help="Ponctuation & majuscules (modèle multilingue)")
+    p.add_argument("--min-utt-chars", type=int, default=60, help="Fusion si segment trop court")
+    p.add_argument("--merge-gap-sec", type=float, default=0.8, help="Fusion si pause ≤ N secondes")
+
+    # Déduplication
+    p.add_argument("--no-dedup-vtt", action="store_true", help="Désactive l'anti-doublons VTT")
+    p.add_argument("--dedup-strong", action="store_true", help="Anti-redite agressif cross-speaker")
+    p.add_argument("--dedup-window", type=float, default=7.0, help="Fenêtre (sec) pour dédup cross-speaker")
+    p.add_argument("--dedup-sim", type=float, default=0.90, help="Seuil de similarité [0-1]")
+
+    # Exports
+    p.add_argument("--export-srt", action="store_true")
+    p.add_argument("--export-csv", action="store_true")
+    p.add_argument("--export-md", action="store_true")
+
+    args = p.parse_args()
+
+    # -------- Healthcheck --------
     if args.healthcheck:
         print_step("Healthcheck...")
         if shutil.which("ffmpeg"): print_check("ffmpeg OK")
@@ -360,89 +466,106 @@ def main() -> None:
         except Exception: fail("pyannote.audio manquant")
         if os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_TOKEN"): print_check("HF token trouvé")
         else: fail("HF token manquant")
-        print_check("Healthcheck terminé ✅"); sys.exit(0)
+        print_check("Healthcheck terminé ✅")
+        sys.exit(0)
 
-    if not args.input: fail("--input requis (sauf --healthcheck).")
-    if not is_url(args.input): fail("--input doit être une URL YouTube.")
+    if not args.input:
+        fail("--input requis (sauf --healthcheck).")
+    if not is_url(args.input):
+        fail("--input doit être une URL YouTube (YTDLP-only).")
+
     ensure_ffmpeg()
 
     with tempfile.TemporaryDirectory() as td:
-        tmp=Path(td)
+        tmp = Path(td)
 
         # 1) Audio
         print_step("Téléchargement audio YouTube...")
-        media_path=download_youtube_audio(args.input, tmp)
+        media_path = download_youtube_audio(args.input, tmp)
         print_check(f"Fichier téléchargé: {media_path.name}")
 
-        # 2) Sous-titres (FR)
+        # 2) VTT FR
         print_step("Récupération des sous-titres .vtt (FR)...")
-        vtt=download_youtube_subs(args.input, tmp)
-        if vtt is None: fail("Pas de sous-titres FR disponibles (YTDLP-only).")
+        vtt = download_youtube_subs(args.input, tmp)
+        if vtt is None:
+            fail("Pas de sous-titres FR disponibles (YTDLP-only).")
         print_check(f"Sous-titres trouvés: {vtt.name}")
 
-        # 3) Parse + anti-doublons
-        captions, words_all, full_text = build_clean_captions_and_words(vtt, dedup=(not args.no_dedup_vtt))
+        captions = parse_vtt_captions(vtt, dedup_vtt=not args.no_dedup_vtt)
+        words_all = parse_vtt_to_words(vtt)
+        full_text = " ".join(c["text"] for c in captions)
 
-        # 4) Conversion audio (extrait si demandé)
-        start_sec=parse_hhmmss(args.start) if args.start else None
-        wav_path=tmp/"audio_16k_mono.wav"
+        # 3) Audio 16k mono (extrait si demandé)
+        start_sec = parse_hhmmss(args.start) if args.start else None
+        wav_path = tmp / "audio_16k_mono.wav"
         print_step("Conversion en WAV mono 16k...")
         convert_to_wav_mono16k(media_path, wav_path, start=start_sec, duration=args.duration)
         print_check(f"Audio prêt: {wav_path}")
 
-        # 5) Restreindre les mots à l'extrait (si fourni)
+        # 4) Restreindre les mots à l'extrait (si fourni)
         if start_sec is not None and args.duration is not None:
-            end_sec=start_sec+args.duration
-            words_clip=[w for w in words_all if start_sec <= (w["start"]+w["end"]) / 2.0 <= end_sec]
+            end_sec = start_sec + args.duration
+            words_clip = [w for w in words_all if start_sec <= (w["start"] + w["end"]) / 2.0 <= end_sec]
         else:
-            words_clip=words_all
+            words_clip = words_all
         print_check(f"{len(words_clip)} 'mots' à aligner.")
 
-        # 6) Diarization
-        spk_segments=diarize_pyannote(wav_path, num_speakers=args.num_speakers)
+        # 5) Diarization
+        spk_segments = diarize_pyannote(wav_path, num_speakers=args.num_speakers)
 
-        # 7) Alignement
+        # 6) Alignement + post-traitements
         print_step("Alignement mots ↔ locuteurs...")
-        utterances=align_words_to_diarization(words_clip, spk_segments)
+        utterances = align_words_to_diarization(words_clip, spk_segments)
+        # Ponctuation (optionnelle)
+        utterances = apply_punctuation_if_needed(utterances, args.punctuate)
+        # Fusion micro-segments
+        utterances = merge_micro_segments(utterances, min_chars=args.min_utt_chars, merge_gap_sec=args.merge_gap_sec)
+        # Dédup cross-speaker (fort)
+        if args.dedup_strong:
+            utterances = dedup_utterances(
+                utterances,
+                window_sec=args.dedup_window,
+                sim=args.dedup_sim,
+                prefer_longer=True,
+            )
         print_check(f"{len(utterances)} blocs speaker+texte.")
 
-        # 8) Lisibilité (ponctuation, fusion, anti-redites consécutives)
-        if args.punctuate:
-            for u in utterances:
-                u["text"] = punctuate_text(u["text"])
-        utterances = merge_short_utterances(
-            utterances,
-            min_len_chars=args.min_utt_chars,
-            max_gap_sec=args.merge_gap_sec
+        # 7) Exports
+        out_json = Path(args.output)
+        export_json(
+            out_json,
+            src_url=args.input,
+            params={
+                "start": args.start,
+                "duration": args.duration,
+                "num_speakers": args.num_speakers,
+                "punctuate": args.punctuate,
+                "min_utt_chars": args.min_utt_chars,
+                "merge_gap_sec": args.merge_gap_sec,
+                "dedup_vtt": not args.no_dedup_vtt,
+                "dedup_strong": args.dedup_strong,
+                "dedup_window": args.dedup_window,
+                "dedup_sim": args.dedup_sim,
+            },
+            captions=captions,
+            full_text=full_text,
+            utterances=utterances,
+            diag_segments_count=len(spk_segments),
         )
-        if not args.no_cross_dedup:
-            utterances = dedup_consecutive_repetitions(utterances)
+        print_check(f"JSON écrit: {out_json.resolve()}")
 
-        # 9) JSON
-        out=Path(args.output); out.parent.mkdir(parents=True, exist_ok=True)
-        result={"source": args.input,
-                "params":{"start": args.start,"duration": args.duration,"num_speakers": args.num_speakers,
-                          "dedup_vtt": not args.no_dedup_vtt, "punctuate": args.punctuate,
-                          "min_utt_chars": args.min_utt_chars, "merge_gap_sec": args.merge_gap_sec,
-                          "cross_dedup": not args.no_cross_dedup},
-                "transcript":{"captions": captions, "text": full_text},
-                "utterances": utterances,
-                "summary":{"num_captions": len(captions),"num_words_all": len(words_all),
-                           "num_words_clip": len(words_clip),"num_speaker_segments": len(spk_segments),
-                           "num_utterances": len(utterances)}}
-        with open(out,"w",encoding="utf-8") as f: json.dump(result,f,ensure_ascii=False,indent=2)
-        print_check(f"JSON écrit: {out.resolve()}")
-
-        # 10) Exports optionnels
-        base = out.with_suffix("")
+        base = out_json.with_suffix("")
         if args.export_srt:
-            export_srt(utterances, base.with_suffix(".srt"))
+            export_srt(base.with_suffix(".srt"), utterances)
+            print_check(f"SRT écrit: {base.with_suffix('.srt')}")
         if args.export_csv:
-            export_csv(utterances, base.with_suffix(".csv"))
+            export_csv(base.with_suffix(".csv"), utterances)
+            print_check(f"CSV écrit: {base.with_suffix('.csv')}")
         if args.export_md:
-            export_markdown(utterances, base.with_suffix(".md"))
+            export_md(base.with_suffix(".md"), utterances)
+            print_check(f"MD écrit: {base.with_suffix('.md')}")
 
         print("Terminé ✅")
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
