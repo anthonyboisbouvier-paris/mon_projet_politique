@@ -2,17 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-YouTube → VTT FR (YTDLP-only) → Diarization (pyannote) → JSON (+SRT/CSV/MD)
+YouTube → VTT FR (YTDLP-only) → Diarization (pyannote) → JSON (+ SRT / CSV / MD)
 
-- Télécharge audio + sous-titres .vtt (FR) avec yt-dlp
-- Nettoyage VTT (anti-doublons)
-- Diarization (pyannote/speaker-diarization-3.1) avec token HF
-- Alignement mots↔locuteurs, ponctuation (optionnel), fusion micro-segments
-- Anti-redites cross-speaker (optionnel, agressif)
-- Exports JSON (+ SRT / CSV / Markdown)
+Option B (sans Whisper) pour supprimer les "méga redites" :
+1) Anti-reprises VTT (containment + similarité), garde la version la plus complète.
+2) "Delta-cut" après diarization : si un bloc répète un précédent, on retire le préfixe commun, on garde le nouveau.
+3) Mémoire n-gram courte : rejette les blocs quasi-identiques dans une fenêtre de temps.
 
-Dépendances clés : yt-dlp, webvtt-py, pyannote.audio, torch, ffmpeg
-Optionnel ponctuation : deepmultilingualpunctuation
+Dépendances: yt-dlp, webvtt-py, pyannote.audio, torch, ffmpeg
+Optionnel (ponctuation): deepmultilingualpunctuation
 """
 
 from __future__ import annotations
@@ -28,10 +26,11 @@ import subprocess
 import sys
 import tempfile
 import unicodedata
+from collections import deque
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# ------------------------ Logs ------------------------
+# -------------------- Logs --------------------
 
 def print_step(msg: str) -> None:
     print(f"[STEP] {msg}", flush=True)
@@ -43,7 +42,7 @@ def fail(msg: str, code: int = 1) -> None:
     print(f"[ERROR] {msg}", file=sys.stderr, flush=True)
     sys.exit(code)
 
-# ------------------ Sanity/Helpers --------------------
+# --------------- Sanity/Helpers ---------------
 
 def ensure_ffmpeg() -> None:
     if shutil.which("ffmpeg") is None:
@@ -77,7 +76,7 @@ def parse_hhmmss(s: Optional[str]) -> Optional[float]:
         return int(m) * 60 + float(sec)
     return float(s)
 
-# --- Texte utils (dédup & normalisation) ---
+# --------------- Texte utils ------------------
 
 FILLERS_FR = {
     "euh","bah","ben","hein","du coup","voilà","en fait","je veux dire",
@@ -96,8 +95,23 @@ def _norm_text(s: str) -> str:
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
+def _tokenize(s: str) -> List[str]:
+    return _norm_text(s).split()
+
 def _similar(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, _norm_text(a), _norm_text(b)).ratio()
+
+def _containment_ratio(a: str, b: str) -> float:
+    """
+    Containment 'a dans b' et 'b dans a' via ensembles de tokens.
+    Retourne max(contain(a|b), contain(b|a)).
+    """
+    A, B = set(_tokenize(a)), set(_tokenize(b))
+    if not A or not B:
+        return 0.0
+    ca = len([w for w in A if w in B]) / max(1, len(A))
+    cb = len([w for w in B if w in A]) / max(1, len(B))
+    return max(ca, cb)
 
 def compress_repeats_inside_text(text: str, max_ngram: int = 6) -> str:
     """Supprime répétitions adjacentes (A B C A B C …) & compacte espaces."""
@@ -112,7 +126,14 @@ def compress_repeats_inside_text(text: str, max_ngram: int = 6) -> str:
     t = re.sub(r"\s+", " ", t).strip()
     return t
 
-# -------------------- yt-dlp I/O ----------------------
+def _longest_common_prefix_tokens(a: str, b: str) -> int:
+    A, B = _tokenize(a), _tokenize(b)
+    i, n = 0, min(len(A), len(B))
+    while i < n and A[i] == B[i]:
+        i += 1
+    return i
+
+# ---------------- yt-dlp I/O ------------------
 
 def download_youtube_audio(url: str, out_dir: Path) -> Path:
     from yt_dlp import YoutubeDL
@@ -136,7 +157,7 @@ def download_youtube_subs(url: str, out_dir: Path) -> Optional[Path]:
         "skip_download": True,
         "writesubtitles": True,
         "writeautomaticsub": True,
-        "subtitleslangs": ["fr", "fr-FR", "fr-CA"],
+        "subtitleslangs": ["fr", "fr-FR", "fr-CA"],  # FR only → limite 429
         "subtitlesformat": "vtt",
         "noplaylist": True,
         "quiet": True,
@@ -153,7 +174,7 @@ def download_youtube_subs(url: str, out_dir: Path) -> Optional[Path]:
     vtts = sorted(out_dir.glob("*.vtt"))
     return vtts[0] if vtts else None
 
-# ----------------- Audio (ffmpeg) ---------------------
+# -------------- Audio (ffmpeg) ----------------
 
 def convert_to_wav_mono16k(src: Path, dst: Path,
                            start: Optional[float] = None,
@@ -170,31 +191,70 @@ def convert_to_wav_mono16k(src: Path, dst: Path,
         fail(f"Echec conversion audio (ffmpeg): {p.stderr[:400]}")
     return dst
 
-# --------------- VTT parsing -------------------------
+# -------------- VTT parsing -------------------
 
 def parse_vtt_captions(vtt_path: Path,
                        dedup_vtt: bool = True,
-                       near_window: float = 3.0,
-                       near_sim: float = 0.92) -> List[Dict[str, Any]]:
+                       near_window: float = 5.0,
+                       near_sim: float = 0.92,
+                       contain_thr: float = 0.75) -> List[Dict[str, Any]]:
+    """
+    Anti-reprises VTT ('rolling captions'):
+    - dans une fenêtre near_window (s), si B ~ A (similarité) OU B contient fortement A,
+      on ne garde qu'une version (la plus complète).
+    """
     import webvtt
-    caps: List[Dict[str, Any]] = []
-    last_kept = None
+    if not dedup_vtt:
+        # mode simple : sans dédup
+        caps = []
+        for cue in webvtt.read(str(vtt_path)):
+            text = " ".join(cue.text.strip().split())
+            if not text:
+                continue
+            start, end = to_seconds(cue.start), to_seconds(cue.end)
+            caps.append({"start": start, "end": end, "text": compress_repeats_inside_text(text)})
+        return caps
+
+    buffer = deque()     # captions récentes dans la fenêtre
+    kept: List[Dict[str, Any]] = []
+
     for cue in webvtt.read(str(vtt_path)):
-        text = " ".join(cue.text.strip().split())
-        if not text:
+        raw = " ".join(cue.text.strip().split())
+        if not raw:
             continue
         start, end = to_seconds(cue.start), to_seconds(cue.end)
-        if dedup_vtt and last_kept and (start - last_kept["end"]) <= near_window:
-            if _similar(text, last_kept["text"]) >= near_sim:
-                continue
-        clean = compress_repeats_inside_text(text)
-        item = {"start": start, "end": end, "text": clean}
-        caps.append(item)
-        last_kept = item
-    return caps
+        text = compress_repeats_inside_text(raw)
+
+        # purge du buffer (hors fenêtre)
+        while buffer and start - buffer[0]["end"] > near_window:
+            kept.append(buffer.popleft())
+
+        cur = {"start": start, "end": end, "text": text}
+        drop_cur = False
+
+        # compare avec les captions dans la fenêtre
+        for i in range(len(buffer)-1, -1, -1):
+            prev = buffer[i]
+            sim = _similar(prev["text"], cur["text"])
+            contain = _containment_ratio(prev["text"], cur["text"])
+
+            if sim >= near_sim or contain >= contain_thr:
+                # garder la plus "complète" (plus de tokens)
+                if len(_tokenize(cur["text"])) >= len(_tokenize(prev["text"])):
+                    buffer[i] = cur
+                else:
+                    drop_cur = True
+                break
+
+        if not drop_cur:
+            buffer.append(cur)
+
+    kept.extend(list(buffer))
+    kept.sort(key=lambda x: x["start"])
+    return kept
 
 def parse_vtt_to_words(vtt_path: Path) -> List[Dict[str, Any]]:
-    """Découpe chaque caption en tokens «à plat» (approx horodatés)."""
+    """Découpe chaque caption en tokens « approximativement horodatés »."""
     import webvtt
     words: List[Dict[str, Any]] = []
     for cue in webvtt.read(str(vtt_path)):
@@ -211,12 +271,12 @@ def parse_vtt_to_words(vtt_path: Path) -> List[Dict[str, Any]]:
             words.append({"start": ws, "end": we, "text": tok})
     return words
 
-# ---------------- Diarization ------------------------
+# --------------- Diarization -----------------
 
 def diarize_pyannote(wav_path: Path, num_speakers: Optional[int] = None) -> List[Dict[str, Any]]:
     token = os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_TOKEN")
     if not token:
-        fail("HUGGINGFACE_TOKEN/HF_TOKEN manquant (crée un token sur Hugging Face et exporte la variable).")
+        fail("HUGGINGFACE_TOKEN/HF_TOKEN manquant (crée un token Hugging Face et exporte la variable).")
     try:
         import torch
         from pyannote.audio import Pipeline
@@ -247,7 +307,7 @@ def diarize_pyannote(wav_path: Path, num_speakers: Optional[int] = None) -> List
     print_check(f"Diarization ok. {len(segs)} segments.")
     return segs
 
-# ------------- Alignement mots → speaker --------------
+# ------ Alignement mots → locuteur -----------
 
 def align_words_to_diarization(words: List[Dict[str, Any]],
                                segs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -263,7 +323,6 @@ def align_words_to_diarization(words: List[Dict[str, Any]],
         for s in segs:
             if s["start"] <= t <= s["end"]:
                 return s["speaker"]
-        # si hors segment, on prend le plus proche
         nearest = min(segs, key=lambda s: min(abs(s["start"] - t), abs(s["end"] - t)))
         return nearest["speaker"]
 
@@ -299,7 +358,7 @@ def align_words_to_diarization(words: List[Dict[str, Any]],
             merged.append(u)
     return merged
 
-# ---------------- Post-traitements --------------------
+# ------------- Post-traitements ----------------
 
 def apply_punctuation_if_needed(utterances: List[Dict[str, Any]], enabled: bool) -> List[Dict[str, Any]]:
     if not enabled or not utterances:
@@ -332,28 +391,65 @@ def merge_micro_segments(utterances: List[Dict[str, Any]],
     return out
 
 def dedup_utterances(utts: List[Dict[str, Any]],
-                     window_sec: float = 7.0,
-                     sim: float = 0.90,
-                     prefer_longer: bool = True) -> List[Dict[str, Any]]:
-    """Supprime blocs quasi identiques (même ou autre speaker) dans une fenêtre temporelle."""
+                     window_sec: float = 12.0,
+                     sim: float = 0.88,
+                     prefer_longer: bool = True,
+                     ngram: int = 5,
+                     novelty_ratio: float = 0.20) -> List[Dict[str, Any]]:
+    """
+    Agressif cross-speaker:
+      - similarité + containment contre les blocs récents (fenêtre 'window_sec')
+      - delta-cut : si répétition, on retire le plus long préfixe commun (on garde la partie nouvelle)
+      - mémoire n-gram : rejette si quasi rien de nouveau
+    """
     out: List[Dict[str, Any]] = []
+    seen = {}  # ngram -> last_end_time
+
+    def ngrams(tokens, n):
+        return set(tuple(tokens[i:i+n]) for i in range(0, max(0, len(tokens)-n+1)))
+
     for u in utts:
-        keep = True
         utext = compress_repeats_inside_text(u["text"])
         u["text"] = utext
+        keep = True
+
+        # 1) dédup vs backlog : similarité ou containment
         for v in reversed(out):
             if u["start"] - v["end"] > window_sec:
                 break
-            if _similar(utext, v["text"]) >= sim:
-                if prefer_longer and len(utext) <= len(v["text"]):
-                    keep = False
+            s = _similar(utext, v["text"])
+            contain = _containment_ratio(utext, v["text"])
+            if s >= sim or contain >= 0.75:
+                # delta-cut : enlève le plus long préfixe commun (en tokens)
+                lcp = _longest_common_prefix_tokens(v["text"], utext)
+                vtoks = _tokenize(v["text"])
+                utoks = _tokenize(utext)
+                new_tail = " ".join(utoks[lcp:])
+                new_tail = compress_repeats_inside_text(new_tail)
+                if len(new_tail) >= 8:  # assez de "nouveau"
+                    u["text"] = new_tail
                 else:
-                    out.remove(v)
+                    keep = False
                 break
+
+        if not keep:
+            continue
+
+        # 2) filtre n-gram de nouveauté
+        toks = _tokenize(u["text"])
+        N = ngrams(toks, ngram) if len(toks) >= ngram else set()
+        if N:
+            known = sum(1 for g in N if g in seen and (u["start"] - seen[g]) <= window_sec)
+            if known / max(1, len(N)) > (1.0 - novelty_ratio):
+                keep = False
+            else:
+                for g in N:
+                    seen[g] = u["end"]
+
         if keep:
             out.append(u)
 
-    # fusion (encore) pour mêmes speakers très proches
+    # fusion finale même speaker + petite pause
     merged: List[Dict[str, Any]] = []
     for u in out:
         if merged and merged[-1]["speaker"] == u["speaker"] and (u["start"] - merged[-1]["end"]) <= 0.8:
@@ -363,7 +459,7 @@ def dedup_utterances(utts: List[Dict[str, Any]],
             merged.append(u)
     return merged
 
-# ------------------- Exports -------------------------
+# ------------------ Exports -------------------
 
 def export_json(path: Path,
                 src_url: str,
@@ -424,13 +520,15 @@ def export_md(path: Path, utterances: List[Dict[str, Any]]) -> None:
             buf.append(u["text"])
         flush()
 
-# ---------------------- Main -------------------------
+# --------------------- Main -------------------
 
 def main() -> None:
     p = argparse.ArgumentParser(description="YouTube → VTT FR (YTDLP-only) + Diarization (pyannote) → JSON")
     p.add_argument("--input", type=str, required=False, help="URL YouTube")
     p.add_argument("--output", type=str, default="result.json", help="Chemin du JSON de sortie")
     p.add_argument("--healthcheck", action="store_true", help="Vérifie l'environnement et quitte")
+
+    # Diarization
     p.add_argument("--start", type=str, default=None, help="Début HH:MM:SS ou MM:SS de l'extrait à diariser")
     p.add_argument("--duration", type=int, default=None, help="Durée en secondes de l'extrait à diariser")
     p.add_argument("--num-speakers", type=int, default=None, help="Forcer N locuteurs (optionnel)")
@@ -440,11 +538,18 @@ def main() -> None:
     p.add_argument("--min-utt-chars", type=int, default=60, help="Fusion si segment trop court")
     p.add_argument("--merge-gap-sec", type=float, default=0.8, help="Fusion si pause ≤ N secondes")
 
-    # Déduplication
+    # Dédup VTT (pré)
     p.add_argument("--no-dedup-vtt", action="store_true", help="Désactive l'anti-doublons VTT")
-    p.add_argument("--dedup-strong", action="store_true", help="Anti-redite agressif cross-speaker")
-    p.add_argument("--dedup-window", type=float, default=7.0, help="Fenêtre (sec) pour dédup cross-speaker")
-    p.add_argument("--dedup-sim", type=float, default=0.90, help="Seuil de similarité [0-1]")
+    p.add_argument("--vtt-window", type=float, default=5.0, help="Fenêtre VTT (sec) anti-reprises")
+    p.add_argument("--vtt-sim", type=float, default=0.92, help="Seuil similarité VTT")
+    p.add_argument("--vtt-contain", type=float, default=0.75, help="Seuil containment VTT")
+
+    # Dédup utterances (post)
+    p.add_argument("--no-dedup", action="store_true", help="Désactive la dédup post-diarization")
+    p.add_argument("--dedup-window", type=float, default=12.0, help="Fenêtre (sec) post-diarization")
+    p.add_argument("--dedup-sim", type=float, default=0.88, help="Seuil similarité post-diarization")
+    p.add_argument("--dedup-ngram", type=int, default=5, help="Taille n-gram pour nouveauté")
+    p.add_argument("--dedup-novelty", type=float, default=0.20, help="Ratio de nouveauté minimal (0-1)")
 
     # Exports
     p.add_argument("--export-srt", action="store_true")
@@ -491,7 +596,13 @@ def main() -> None:
             fail("Pas de sous-titres FR disponibles (YTDLP-only).")
         print_check(f"Sous-titres trouvés: {vtt.name}")
 
-        captions = parse_vtt_captions(vtt, dedup_vtt=not args.no_dedup_vtt)
+        captions = parse_vtt_captions(
+            vtt,
+            dedup_vtt=not args.no_dedup_vtt,
+            near_window=args.vtt_window,
+            near_sim=args.vtt_sim,
+            contain_thr=args.vtt_contain,
+        )
         words_all = parse_vtt_to_words(vtt)
         full_text = " ".join(c["text"] for c in captions)
 
@@ -516,17 +627,16 @@ def main() -> None:
         # 6) Alignement + post-traitements
         print_step("Alignement mots ↔ locuteurs...")
         utterances = align_words_to_diarization(words_clip, spk_segments)
-        # Ponctuation (optionnelle)
         utterances = apply_punctuation_if_needed(utterances, args.punctuate)
-        # Fusion micro-segments
         utterances = merge_micro_segments(utterances, min_chars=args.min_utt_chars, merge_gap_sec=args.merge_gap_sec)
-        # Dédup cross-speaker (fort)
-        if args.dedup_strong:
+        if not args.no_dedup:
             utterances = dedup_utterances(
                 utterances,
                 window_sec=args.dedup_window,
                 sim=args.dedup_sim,
                 prefer_longer=True,
+                ngram=args.dedup_ngram,
+                novelty_ratio=args.dedup_novelty,
             )
         print_check(f"{len(utterances)} blocs speaker+texte.")
 
@@ -543,9 +653,14 @@ def main() -> None:
                 "min_utt_chars": args.min_utt_chars,
                 "merge_gap_sec": args.merge_gap_sec,
                 "dedup_vtt": not args.no_dedup_vtt,
-                "dedup_strong": args.dedup_strong,
+                "vtt_window": args.vtt_window,
+                "vtt_sim": args.vtt_sim,
+                "vtt_contain": args.vtt_contain,
+                "dedup": not args.no_dedup,
                 "dedup_window": args.dedup_window,
                 "dedup_sim": args.dedup_sim,
+                "dedup_ngram": args.dedup_ngram,
+                "dedup_novelty": args.dedup_novelty,
             },
             captions=captions,
             full_text=full_text,
