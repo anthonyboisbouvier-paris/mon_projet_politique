@@ -168,8 +168,8 @@ Lancer :
   --num-speakers 2 --punctuate --export-srt --export-csv --export-md
 ```
 
-RUN agressif (nettoyage + ponctuation + fusion + anti-redites fortes + exports)
-YOUTUBE_URL = "https://www.youtube.com/watch?v=cTePa6vmeag"  # ← remplace par ton URL
+# 4) RUN agressif (full vidéo)
+YOUTUBE_URL = "https://www.youtube.com/watch?v=cTePa6vmeag"  # ← change si besoin
 
 !python /content/app.py \
   --input "{YOUTUBE_URL}" \
@@ -177,8 +177,13 @@ YOUTUBE_URL = "https://www.youtube.com/watch?v=cTePa6vmeag"  # ← remplace par 
   --num-speakers 2 \
   --punctuate --export-srt --export-csv --export-md \
   --min-utt-chars 80 --merge-gap-sec 1.0 \
-  --dedup-strong --dedup-window 8 --dedup-sim 0.92
-Les fichiers générés (video_full.json, .srt, .csv, .md) apparaissent dans le panneau Fichiers de Colab (/content). Tu peux les télécharger directement.
+  --dedup-window 12 --dedup-sim 0.88 \
+  --vtt-window 5 --vtt-sim 0.92 --vtt-contain 0.75
+Si tu veux rendre le filtre plus ou moins strict :
+
+plus strict (moins de redites) → augmente --dedup-window (p.ex. 14) et/ou --dedup-sim (0.90–0.94).
+
+moins strict (préserve plus de redites naturelles) → diminue ces seuils.
 
 ---
 
