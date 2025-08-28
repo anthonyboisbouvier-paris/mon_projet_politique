@@ -13,10 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-# ----------------------------- petites utilitaires ----------------------------
+# ----------------------------- utilitaires shell ------------------------------
 
 def sh(cmd: list[str], allow_fail: bool = False) -> str:
-    """Exécute une commande shell en capturant stdout/stderr."""
     p = subprocess.run(cmd, text=True, capture_output=True)
     if p.returncode != 0 and not allow_fail:
         raise RuntimeError(
@@ -28,7 +27,6 @@ def ensure_parent(path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
 
 def seconds_from_timestamp(ts: str) -> float:
-    """'HH:MM:SS.mmm' -> secondes flottantes."""
     h, m, s = ts.split(":")
     return int(h) * 3600 + int(m) * 60 + float(s)
 
@@ -54,14 +52,14 @@ def audio_duration_seconds(wav_path: str) -> float:
 
 def download_youtube(input_url: str, subs_lang: str, allow_auto: bool) -> Tuple[str, Optional[str], Path]:
     """
-    - Télécharge l'audio en WAV.
-    - Télécharge les sous-titres en .vtt si dispos (FR prioritaire; auto si allow_auto=True).
+    - Télécharge l'audio (WAV)
+    - Télécharge les sous-titres .vtt si dispos (FR en priorité; auto si allow_auto)
     Retourne (wav_16k_mono_path, vtt_path_or_None, workdir)
     """
     workdir = Path(tempfile.mkdtemp(prefix="yt_"))
     base = workdir / "media"
 
-    # 1) AUDIO → WAV (qualité max)
+    # AUDIO -> WAV
     cmd_audio = [
         "yt-dlp",
         "-q",
@@ -81,7 +79,7 @@ def download_youtube(input_url: str, subs_lang: str, allow_auto: bool) -> Tuple[
     if wav is None:
         raise RuntimeError("Audio .wav introuvable après yt-dlp.")
 
-    # 2) SOUS-TITRES → .vtt
+    # SOUS-TITRES -> .vtt
     sub_args = [
         "--write-subs",
         "--sub-langs",
@@ -93,7 +91,6 @@ def download_youtube(input_url: str, subs_lang: str, allow_auto: bool) -> Tuple[
         f"{base}.%(ext)s",
     ]
     if allow_auto:
-        # IMPORTANT : option séparée, pas une valeur du param précédent
         sub_args.insert(0, "--write-auto-subs")
 
     print("[STEP] Récupération des sous-titres .vtt (FR préférés)…")
@@ -102,22 +99,10 @@ def download_youtube(input_url: str, subs_lang: str, allow_auto: bool) -> Tuple[
     if vtt is None:
         print("[WARN] Sous-titres .vtt introuvables.")
 
-    # 3) Conversion en 16k mono
+    # CONVERSION 16 kHz mono
     wav_16k = workdir / "audio_16k_mono.wav"
     print("[STEP] Conversion en WAV mono 16k…")
-    sh(
-        [
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(wav),
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            str(wav_16k),
-        ]
-    )
+    sh(["ffmpeg", "-y", "-i", str(wav), "-ac", "1", "-ar", "16000", str(wav_16k)])
     print(f"[CHECK] Audio prêt: {wav_16k}")
     return str(wav_16k), (str(vtt) if vtt else None), workdir
 
@@ -133,9 +118,7 @@ def parse_vtt(vtt_path: str) -> List[Caption]:
     try:
         import webvtt
     except Exception as e:
-        raise RuntimeError(
-            "Le paquet 'webvtt-py' est requis. Installe :\n  pip install webvtt-py"
-        ) from e
+        raise RuntimeError("Installe 'webvtt-py' :  pip install webvtt-py") from e
 
     print("[STEP] Parsing VTT → segments horodatés…")
     caps: List[Caption] = []
@@ -155,18 +138,56 @@ class SpkSeg:
     end: float
     speaker: str
 
+def _smooth_segments(segs: List[SpkSeg], min_speech: float = 0.35, min_pause: float = 0.25) -> List[SpkSeg]:
+    """Lissage simple : fusionne petits silences & absorbe micro-segments."""
+    if not segs:
+        return segs
+    segs = sorted(segs, key=lambda s: s.start)
+
+    # 1) fusionner les gaps courts entre segments du même locuteur
+    fused: List[SpkSeg] = [SpkSeg(segs[0].start, segs[0].end, segs[0].speaker)]
+    for s in segs[1:]:
+        last = fused[-1]
+        if s.speaker == last.speaker and (s.start - last.end) <= min_pause:
+            last.end = max(last.end, s.end)
+        else:
+            fused.append(SpkSeg(s.start, s.end, s.speaker))
+
+    # 2) absorber les segments trop courts
+    i = 0
+    while i < len(fused):
+        cur = fused[i]
+        dur = cur.end - cur.start
+        if dur < min_speech and len(fused) > 1:
+            if i == 0:
+                fused[1].start = min(fused[1].start, cur.start)
+                fused.pop(0)
+                continue
+            if i == len(fused) - 1:
+                fused[-2].end = max(fused[-2].end, cur.end)
+                fused.pop()
+                break
+            prev, nxt = fused[i - 1], fused[i + 1]
+            # préférence pour voisin même locuteur sinon le plus long
+            if prev.speaker == cur.speaker or (prev.end - prev.start) >= (nxt.end - nxt.start):
+                prev.end = max(prev.end, cur.end)
+                fused.pop(i)
+                continue
+            else:
+                nxt.start = min(nxt.start, cur.start)
+                fused.pop(i)
+                continue
+        i += 1
+    return fused
+
 def diarize_pyannote(wav_path: str, num_speakers: Optional[int]) -> List[SpkSeg]:
     try:
         import torch
         from pyannote.audio import Pipeline
     except Exception as e:
-        raise RuntimeError(
-            "pyannote.audio est manquant ou incompatible. Installe :\n  pip install 'pyannote.audio>=3.1.1'"
-        ) from e
+        raise RuntimeError("Installe 'pyannote.audio>=3.1.1'") from e
 
-    # Token HF (doit avoir accepté les conditions du modèle)
     hf_token = os.environ.get("HF_TOKEN", None)
-
     print("[STEP] Diarization (pyannote.audio)…")
     dev = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
     try:
@@ -175,25 +196,21 @@ def diarize_pyannote(wav_path: str, num_speakers: Optional[int]) -> List[SpkSeg]
         ).to(dev)
     except Exception as e:
         raise RuntimeError(
-            "Échec chargement pipeline pyannote. Vérifie HF_TOKEN et l'accès au modèle.\n"
-            "Accepte les conditions ici : https://hf.co/pyannote/speaker-diarization-3.1"
+            "Échec chargement pipeline. Vérifie HF_TOKEN et accepte les conditions du modèle."
         ) from e
 
-    diarization = pipe(
-        {"audio": wav_path},
-        num_speakers=num_speakers,      # force 2 si fourni
-        min_speech_duration=0.25,
-        min_silence_duration=0.25,
-        collar=0.05,
-    )
+    # >>> IMPORTANT : sur 3.1, ne PAS passer min_speech_duration/min_silence_duration/collar
+    diarization = pipe({"audio": wav_path}, num_speakers=num_speakers)
 
     segs: List[SpkSeg] = []
     for turn, _, speaker in diarization.itertracks(yield_label=True):
         segs.append(SpkSeg(float(turn.start), float(turn.end), str(speaker)))
     segs.sort(key=lambda x: x.start)
 
+    # lissage côté code pour éviter les micro-blips
+    segs = _smooth_segments(segs, min_speech=0.35, min_pause=0.25)
+
     if not segs:
-        # fallback: un seul locuteur plein cadre
         dur = audio_duration_seconds(wav_path)
         segs = [SpkSeg(0.0, dur, "SPEAKER_00")]
     return segs
@@ -211,15 +228,11 @@ def overlap(a_start: float, a_end: float, b_start: float, b_end: float) -> float
     return max(0.0, min(a_end, b_end) - max(a_start, b_start))
 
 def build_utterances(spk: List[SpkSeg], caps: List[Caption]) -> List[Utt]:
-    """
-    Pour chaque segment locuteur, concatène les captions chevauchantes.
-    """
     utts: List[Utt] = []
     j = 0
     n = len(caps)
     for s in spk:
         buf = []
-        # avance j jusqu'à la première cap susceptible de chevaucher
         while j < n and caps[j].end <= s.start:
             j += 1
         k = j
@@ -244,10 +257,6 @@ def _normalize_text(t: str) -> str:
 def remove_near_duplicates(
     utterances: List[Utt], ngram_max: int = 6, lookback_seconds: float = 6.0
 ) -> List[Utt]:
-    """
-    Supprime les répétitions proches inter- & intra-locuteur par n-grammes.
-    Conserve la première occurrence dans une fenêtre glissante temporelle.
-    """
     kept: List[Utt] = []
     memory: deque[Tuple[str, float]] = deque()
 
@@ -262,7 +271,7 @@ def remove_near_duplicates(
         t_end = float(u.end)
 
         drop = False
-        for n in range(min(ngram_max, len(words)), 1, -1):  # du long vers le court
+        for n in range(min(ngram_max, len(words)), 1, -1):
             for i in range(len(words) - n + 1):
                 ng = " ".join(words[i : i + n])
                 if len(ng) < 6:
@@ -275,7 +284,6 @@ def remove_near_duplicates(
 
         if not drop:
             kept.append(u)
-            # mémoriser quelques n-grammes
             for n in range(1, min(ngram_max, len(words)) + 1):
                 for i in range(len(words) - n + 1):
                     ng = " ".join(words[i : i + n])
@@ -305,13 +313,11 @@ def run(
 
     spk = diarize_pyannote(wav_path, num_speakers=num_speakers)
 
-    # Alignement + filtre de redites
     raw_utts = build_utterances(spk, caps) if caps else []
     print(f"[CHECK] {len(raw_utts)} segments alignés avant filtrage.")
     utts = remove_near_duplicates(raw_utts, ngram_max=6, lookback_seconds=6.0)
     print(f"[CHECK] {len(utts)} segments après filtrage des répétitions.")
 
-    # JSON final
     ensure_parent(Path(output_path))
     meta = {
         "source": "YouTube",
@@ -341,7 +347,6 @@ def run(
         json.dump(out, f, ensure_ascii=False, indent=2)
 
     print(f"[OK] JSON écrit → {output_path}")
-    # Nettoyage temp
     try:
         shutil.rmtree(workdir, ignore_errors=True)
     except Exception:
@@ -350,18 +355,17 @@ def run(
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input", required=True, help="URL YouTube ou chemin audio")
-    ap.add_argument("--output", required=True, help="Chemin du JSON de sortie")
-    ap.add_argument("--subs-lang", default="fr,fr-FR,fr-CA", help="Langues VTT (priorité FR)")
-    ap.add_argument("--allow-auto", action="store_true", help="Autoriser les sous-titres auto")
-    ap.add_argument("--num-speakers", type=int, default=None, help="Nombre de locuteurs attendus")
-    ap.add_argument("--keep-metadata", action="store_true", help="Conserver l'en-tête meta")
-    ap.add_argument("--healthcheck", action="store_true", help="Vérifie que le script se lance")
+    ap.add_argument("--input", required=True)
+    ap.add_argument("--output", required=True)
+    ap.add_argument("--subs-lang", default="fr,fr-FR,fr-CA")
+    ap.add_argument("--allow-auto", action="store_true")
+    ap.add_argument("--num-speakers", type=int, default=None)
+    ap.add_argument("--keep-metadata", action="store_true")
+    ap.add_argument("--healthcheck", action="store_true")
     args = ap.parse_args()
 
     if args.healthcheck:
-        print("ok")
-        return
+        print("ok"); return
 
     run(
         input_url=args.input,
@@ -371,7 +375,6 @@ def main():
         num_speakers=args.num_speakers,
         keep_metadata=args.keep_metadata,
     )
-
 
 if __name__ == "__main__":
     main()
