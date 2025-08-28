@@ -1,190 +1,211 @@
-%%bash
-set -e
-cat <<'PY' > /content/clean_json_v2.py
-# -*- coding: utf-8 -*-
-import json, re, unicodedata, argparse
-from difflib import SequenceMatcher
+import argparse, json, re, unicodedata, difflib
 from pathlib import Path
+from typing import List, Dict, Any, Tuple, Optional
 
-SENT_SPLIT = re.compile(r'(?<=[\.\?\!\u2026;:])\s+|[\n\r]+')  # . ? ! … ; : ou sauts de ligne
-WS = re.compile(r'\s+')
-PUNCT = re.compile(r'[^\w]+', re.UNICODE)
+# --------- Normalisation & utilitaires ---------
+def _normalize(txt: str) -> str:
+    if not txt:
+        return ""
+    t = txt.lower().replace("’", "'")
+    t = unicodedata.normalize("NFD", t)
+    t = "".join(ch for ch in t if unicodedata.category(ch) != "Mn")
+    t = re.sub(r"[^\w\s']", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
 
-def strip_accents(s: str) -> str:
-    return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+_WORD = r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]+(?:['’-][A-Za-zÀ-ÖØ-öø-ÿ0-9]+)?"
+_PHRASE_REPEAT = re.compile(rf"(?i)\b(({_WORD})(?:\s+{_WORD}){{0,3}})\b(?:\s+\1\b)+")
 
-def normalize_for_match(s: str) -> str:
-    s = strip_accents(s.lower())
-    s = PUNCT.sub(' ', s)
-    return WS.sub(' ', s).strip()
+def _collapse_internal_repeats(text: str) -> str:
+    if not text: return text
+    cur = re.sub(rf"(?i)\b({_WORD})\b(?:\s+\1\b)+", r"\1", text)
+    prev = None
+    while cur != prev:
+        prev = cur
+        cur = _PHRASE_REPEAT.sub(r"\1", cur)
+    cur = re.sub(r"\s+", " ", cur).strip()
+    return cur
 
-def sent_tokenize(text: str):
-    parts = [p.strip() for p in SENT_SPLIT.split(text) if p and p.strip()]
-    # Si aucun séparateur n’a fonctionné, on retombe sur une découpe douce par virgules longues
-    if len(parts) <= 1:
-        parts = [p.strip() for p in re.split(r',(?!\d)', text) if p.strip()]
-    return parts
+def _sim(a: str, b: str) -> float:
+    if not a or not b: return 0.0
+    return difflib.SequenceMatcher(None, a, b).ratio()
 
-def tokens(text: str):
-    return [t for t in re.split(r'\s+', text) if t]
+# --------- Chargement / sauvegarde ---------
+def _pick_utterances_schema(data: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], str]:
+    """
+    Retourne (utterances, schema) où schema ∈ {'utterances','segments','segments_by_speaker','none'}.
+    Utterance dict attendu: {speaker?, start?, end?, text}
+    """
+    if isinstance(data.get("utterances"), list):
+        return data["utterances"], "utterances"
+    if isinstance(data.get("segments"), list):
+        # segments style Whisper/pyannote; parfois sans speaker
+        out = []
+        for s in data["segments"]:
+            out.append({
+                "speaker": s.get("speaker", "SPEAKER_00"),
+                "start": float(s.get("start", 0.0)),
+                "end": float(s.get("end", s.get("start", 0.0))),
+                "text": s.get("text", "") or "",
+            })
+        return out, "segments"
+    if isinstance(data.get("segments_by_speaker"), dict):
+        out = []
+        for spk, segs in data["segments_by_speaker"].items():
+            for s in segs:
+                out.append({
+                    "speaker": spk,
+                    "start": float(s.get("start", 0.0)),
+                    "end": float(s.get("end", s.get("start", 0.0))),
+                    "text": s.get("text", "") or "",
+                })
+        out.sort(key=lambda x: (x.get("start", 0.0), x.get("end", 0.0)))
+        return out, "segments_by_speaker"
+    return [], "none"
 
-def equal_norm(a: str, b: str) -> bool:
-    return normalize_for_match(a) == normalize_for_match(b)
-
-def collapse_adjacent_repeats(text: str, max_ngram: int = 20) -> str:
-    """Supprime A A (xN) où A peut être un n-gramme long (jusqu’à max_ngram tokens)."""
-    toks = tokens(text)
-    out = []
-    i = 0
-    while i < len(toks):
-        # Cherche le plus long n-gramme qui se répète immédiatement
-        kmax = min(max_ngram, (len(toks) - i) // 2)
-        chosen_k = 0
-        for k in range(kmax, 0, -1):
-            left = ' '.join(toks[i:i+k])
-            right = ' '.join(toks[i+k:i+2*k])
-            if normalize_for_match(left) == normalize_for_match(right):
-                chosen_k = k
-                break
-        if chosen_k:
-            # Garde une seule occurrence, saute toutes les répétitions suivantes
-            out.extend(toks[i:i+chosen_k])
-            i += 2*chosen_k
-            # Cas A A A… : saute les occurrences suivantes
-            while i + chosen_k <= len(toks):
-                seg = ' '.join(toks[i:i+chosen_k])
-                if normalize_for_match(seg) == normalize_for_match(' '.join(out[-chosen_k:])):
-                    i += chosen_k
-                else:
-                    break
-        else:
-            out.append(toks[i])
-            i += 1
-    return ' '.join(out)
-
-def ngram_set(s: str, n: int = 3):
-    w = normalize_for_match(s).split()
-    if len(w) < n:
-        # pour les petites phrases, on retombe sur des 2-grammes / 1-grammes
-        n = 2 if len(w) >= 2 else 1
-    return {' '.join(w[i:i+n]) for i in range(0, max(0, len(w)-n+1))}
-
-def jaccard(a, b) -> float:
-    if not a or not b:
-        return 0.0
-    inter = len(a & b)
-    if inter == 0:
-        return 0.0
-    return inter / float(len(a | b))
-
-def is_near_duplicate(s: str, recent_norms, sim_drop: float, seq_ratio: float, ngram_n: int):
-    # Jaccard sur n-grammes
-    A = ngram_set(s, n=ngram_n)
-    for r in recent_norms:
-        if jaccard(A, r['ngrams']) >= sim_drop:
-            return True
-        # ratio de séquence (Levenshtein approximé)
-        if SequenceMatcher(None, r['norm'], normalize_for_match(s)).ratio() >= seq_ratio:
-            return True
-    return False
-
-def clean_utterance_text(raw: str, recent_norms, sim_drop: float, seq_ratio: float,
-                         ngram_n: int, max_ngram_repeat: int, min_clause_chars: int):
-    # 1) collapse de répétitions contiguës à base de n-grammes
-    collapsed = collapse_adjacent_repeats(raw, max_ngram=max_ngram_repeat)
-    # 2) split en phrases/propositions
-    clauses = sent_tokenize(collapsed)
-    cleaned = []
-    local_recent = []  # tampon intra-énoncé
-    for c in clauses:
-        c = c.strip()
-        if not c:
-            continue
-        if len(c) < min_clause_chars:
-            # petites miettes : on tente la fusion avec la clause précédente si possible
-            if cleaned:
-                merged = cleaned[-1] + ' ' + c
-                # remplace la dernière clause, puis continue
-                cleaned[-1] = merged.strip()
-                continue
-            else:
-                # sinon on stocke quand même
-                cleaned.append(c)
-                continue
-        # dédoublonnage intra-énoncé (local) puis global (recent_norms)
-        if is_near_duplicate(c, [{'norm': normalize_for_match(x),
-                                  'ngrams': ngram_set(x, n=ngram_n)} for x in local_recent],
-                             sim_drop, seq_ratio, ngram_n):
-            continue
-        if is_near_duplicate(c, recent_norms, sim_drop, seq_ratio, ngram_n):
-            continue
-        cleaned.append(c)
-        local_recent.append(c)
-        recent_norms.append({'norm': normalize_for_match(c),
-                             'ngrams': ngram_set(c, n=ngram_n)})
-        # on bride la taille du tampon global
-        if len(recent_norms) > 800:
-            recent_norms[:] = recent_norms[-800:]
-    # 3) recolle avec des espaces propres
-    out = ' '.join(cleaned).strip()
-    # petit nettoyage d’espaces avant ponctuation
-    out = re.sub(r'\s+([,;:\.\?\!\u2026])', r'\1', out)
-    return out
-
-def process(data, sim_drop: float, seq_ratio: float, ngram_n: int,
-            max_ngram_repeat: int, min_clause_chars: int):
-    utts = data.get('utterances', [])
-    recent_norms = []  # tampon global de phrases récentes (tous locuteurs)
-    new_utts = []
-    for u in utts:
-        t = u.get('text', '')
-        cleaned = clean_utterance_text(
-            t, recent_norms,
-            sim_drop=sim_drop,
-            seq_ratio=seq_ratio,
-            ngram_n=ngram_n,
-            max_ngram_repeat=max_ngram_repeat,
-            min_clause_chars=min_clause_chars
-        )
-        if cleaned:
-            nu = dict(u)
-            nu['text'] = cleaned
-            new_utts.append(nu)
-    data['utterances'] = new_utts
-    # reconstruit le champ "text"
-    data['text'] = ' '.join(u['text'] for u in new_utts).strip()
+def _write_back(data: Dict[str, Any], utterances: List[Dict[str, Any]], new_text: str, schema: str) -> Dict[str, Any]:
+    # On ne touche pas aux métadonnées existantes ; on met à jour utterances + text
+    data = dict(data)  # shallow copy
+    data["utterances"] = utterances
+    data["text"] = new_text
+    # On laisse intacts les autres structures si elles existent (au besoin tu pourras les supprimer)
     return data
 
+# --------- Coeur du dédoublonnage ---------
+def dedupe_utterances(
+    utts: List[Dict[str, Any]],
+    window_sec: float = 30.0,
+    sim_drop: float = 0.90,
+    near_merge_gap: float = 1.5,
+    near_merge_sim: float = 0.80,
+    cross_speaker_drop: bool = True,
+) -> List[Dict[str, Any]]:
+    """
+    - Supprime les répétitions internes ('bonjour bonjour', 'il est il est', etc.).
+    - Enlève les segments quasi identiques apparus dans une *fenêtre glissante* (même entre locuteurs si voulu).
+    - Fusionne les doublons très proches *si même locuteur*.
+    """
+    if not utts: return utts
+    # tri temporel (sécurité)
+    utts = sorted(utts, key=lambda u: (float(u.get("start", 0.0)), float(u.get("end", 0.0))))
+
+    # 1) nettoyage intra-segment
+    for u in utts:
+        u["text"] = _collapse_internal_repeats(u.get("text",""))
+
+    cleaned: List[Dict[str, Any]] = []
+    recent = []  # [{end, ntxt, spk}]
+    def purge_recent(now: float):
+        cutoff = now - window_sec
+        while recent and recent[0]["end"] < cutoff:
+            recent.pop(0)
+
+    for u in utts:
+        start = float(u.get("start", 0.0))
+        end   = float(u.get("end", start))
+        spk   = u.get("speaker", "SPEAKER_00")
+        txt   = u.get("text","") or ""
+        ntxt  = _normalize(txt)
+
+        purge_recent(start)
+
+        drop = False
+        if ntxt:
+            # Construit un "tail" du contexte récent (uniquement mêmes spk si cross_speaker_drop=False)
+            pool = recent if cross_speaker_drop else [r for r in recent if r["spk"] == spk]
+            tail = " ".join(r["ntxt"] for r in pool)
+            tail = tail[-max(300, len(ntxt)*2):] if tail else ""
+            if tail:
+                if ntxt in tail:
+                    drop = True
+                elif _sim(ntxt, tail) >= sim_drop:
+                    drop = True
+
+        if drop:
+            continue
+
+        # Fusion si quasi contigu ET même speaker ET très similaire
+        if cleaned:
+            last = cleaned[-1]
+            gap = start - float(last.get("end", start))
+            if (last.get("speaker","") == spk) and (gap <= near_merge_gap):
+                last_ntxt = _normalize(last.get("text",""))
+                if _sim(ntxt, last_ntxt) >= near_merge_sim:
+                    # garde le texte le plus long (évite de perdre de l'info)
+                    if len(txt) > len(last.get("text","")):
+                        last["text"] = txt
+                    last["end"] = max(float(last.get("end", end)), end)
+                    # maj mémoire
+                    if recent:
+                        recent[-1]["end"] = last["end"]
+                        recent[-1]["ntxt"] = _normalize(last["text"])
+                    continue
+
+        kept = {
+            "speaker": spk,
+            "start": start,
+            "end": end,
+            "text": txt
+        }
+        cleaned.append(kept)
+        recent.append({"end": end, "ntxt": ntxt, "spk": spk})
+
+    # 3) second passage: encore enlever les micro-bégaiements internes
+    for u in cleaned:
+        u["text"] = _collapse_internal_repeats(u.get("text",""))
+
+    return cleaned
+
+def rebuild_text(utts: List[Dict[str, Any]]) -> str:
+    raw = " ".join(u.get("text","") for u in utts)
+    return _collapse_internal_repeats(raw)
+
+# --------- CLI ---------
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('-i','--input', required=True)
-    ap.add_argument('-o','--output', required=True)
-    # Seuils très agressifs par défaut :
-    ap.add_argument('--sim-drop', type=float, default=0.94, help='Seuil Jaccard n-gram pour drop')
-    ap.add_argument('--seq-ratio', type=float, default=0.94, help='Seuil difflib ratio pour drop')
-    ap.add_argument('--ngram-n', type=int, default=3, help='n pour n-grammes (Jaccard)')
-    ap.add_argument('--max-ngram-repeat', type=int, default=20, help='Longueur max des n-grammes à effondrer')
-    ap.add_argument('--min-clause-chars', type=int, default=20, help='Taille mini d’une clause')
+    ap = argparse.ArgumentParser(description="Nettoie un JSON d'app.py (suppression agressive des répétitions).")
+    ap.add_argument("--input", "-i", required=True, help="Chemin du JSON en entrée (app.py).")
+    ap.add_argument("--output", "-o", required=True, help="Chemin du JSON nettoyé.")
+    ap.add_argument("--window-sec", type=float, default=30.0, help="Fenêtre de détection des doublons (sec).")
+    ap.add_argument("--sim-drop", type=float, default=0.90, help="Seuil de similarité pour DROP (0..1).")
+    ap.add_argument("--near-merge-gap", type=float, default=1.5, help="Gap max pour fusionner (sec).")
+    ap.add_argument("--near-merge-sim", type=float, default=0.80, help="Seuil de similarité pour fusion (0..1).")
+    ap.add_argument("--no-cross-speaker-drop", action="store_true",
+                    help="Ne supprime pas un doublon si dit par un autre locuteur (par défaut on supprime quand même).")
+    ap.add_argument("--aggressive", action="store_true",
+                    help="Raccourcis de réglages plus durs (sim_drop=0.93, near_merge_sim=0.85).")
     args = ap.parse_args()
 
-    with open(args.input, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    inp = Path(args.input)
+    out = Path(args.output)
+    out.parent.mkdir(parents=True, exist_ok=True)
 
-    cleaned = process(
-        data,
+    data = json.loads(inp.read_text(encoding="utf-8"))
+    utts, schema = _pick_utterances_schema(data)
+
+    if not utts and data.get("text"):
+        # Fallback texte seul : on fabrique une pseudo-utterance unique
+        utts = [{"speaker":"SPEAKER_00","start":0.0,"end":0.0,"text": data["text"]}]
+        schema = "text-only"
+
+    if args.aggressive:
+        args.sim_drop = max(args.sim_drop, 0.93)
+        args.near_merge_sim = max(args.near_merge_sim, 0.85)
+
+    cleaned = dedupe_utterances(
+        utts,
+        window_sec=args.window_sec,
         sim_drop=args.sim_drop,
-        seq_ratio=args.seq_ratio,
-        ngram_n=args.ngram_n,
-        max_ngram_repeat=args.max_ngram_repeat,
-        min_clause_chars=args.min_clause_chars
+        near_merge_gap=args.near_merge_gap,
+        near_merge_sim=args.near_merge_sim,
+        cross_speaker_drop=(not args.no_cross_speaker_drop),
     )
+    new_text = rebuild_text(cleaned)
 
-    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, 'w', encoding='utf-8') as f:
-        json.dump(cleaned, f, ensure_ascii=False, indent=2)
+    new_data = _write_back(data, cleaned, new_text, schema)
+    out.write_text(json.dumps(new_data, ensure_ascii=False, indent=2), encoding="utf-8")
 
-if __name__ == '__main__':
+    dropped = max(0, len(utts) - len(cleaned))
+    print(f"[OK] {len(utts)} → {len(cleaned)} utterances (−{dropped}). Sortie: {out}")
+
+if __name__ == "__main__":
     main()
-PY
-echo "OK"
-
