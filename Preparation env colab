@@ -1,1 +1,209 @@
+# /workspace/service/main.py
+import os
+import json
+import shlex
+import uuid
+import subprocess
+from pathlib import Path
+from typing import Optional, Dict, Any
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+# --- Config de base ---
+BASE_DIR = Path("/workspace")
+APP_DIR = Path(os.environ.get("APP_DIR", "/workspace/app")).resolve()
+OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR", "/workspace/outputs/json")).resolve()
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+APP_PY = APP_DIR / "app.py"
+CLEAN_PY = APP_DIR / "clean_json.py"
+
+app = FastAPI(title="YT Diarization Service", version="1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # ajuste si besoin
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Helpers ---
+def run_cmd(cmd: list[str], cwd: Optional[Path] = None) -> tuple[bool, str, str]:
+    """Exécute une commande (sans shell) et renvoie (ok, stdout, stderr)."""
+    proc = subprocess.run(
+        cmd, cwd=str(cwd) if cwd else None,
+        capture_output=True, text=True
+    )
+    return proc.returncode == 0, proc.stdout, proc.stderr
+
+def safe_output_path(suggest_name: str) -> Path:
+    """Crée un nom de fichier unique dans OUTPUT_DIR à partir d'une suggestion."""
+    stem = Path(suggest_name).stem
+    uid = uuid.uuid4().hex[:8]
+    return (OUTPUT_DIR / f"{stem}.{uid}.json").resolve()
+
+def ensure_exists(p: Path, kind: str = "file"):
+    if kind == "file" and not p.is_file():
+        raise HTTPException(status_code=500, detail=f"Fichier introuvable : {p}")
+    if kind == "dir" and not p.is_dir():
+        raise HTTPException(status_code=500, detail=f"Répertoire introuvable : {p}")
+
+def summarize_json(path: Path) -> Dict[str, Any]:
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        utterances = data.get("utterances", [])
+        transcript = data.get("transcript", {})
+        captions = transcript.get("captions", []) if isinstance(transcript, dict) else []
+        return {
+            "size_bytes": path.stat().st_size,
+            "num_utterances": len(utterances),
+            "num_captions": len(captions),
+            "top_keys": list(data.keys())[:8],
+        }
+    except Exception as e:
+        return {"error_parsing": str(e), "size_bytes": path.stat().st_size if path.exists() else 0}
+
+# --- Schémas d'API ---
+class TranscribeReq(BaseModel):
+    input: str = Field(..., description="URL YouTube")
+    subs_lang: str = "fr,fr-FR,fr-CA"
+    allow_auto: bool = True
+    num_speakers: Optional[int] = 2
+    keep_metadata: bool = True
+    output: Optional[str] = None
+    return_json: bool = False
+
+class CleanReq(BaseModel):
+    input: str = Field(..., description="Chemin du JSON en entrée")
+    output: Optional[str] = None
+    window_sec: float = 120.0
+    sim_drop: float = 0.99
+    near_merge_gap: float = 3.0
+    near_merge_sim: float = 0.96
+    return_json: bool = False
+
+# --- Endpoints ---
+@app.get("/")
+def root():
+    return {
+        "service": "YT Diarization",
+        "endpoints": ["/health", "/transcribe", "/clean"],
+        "output_dir": str(OUTPUT_DIR),
+        "app_dir": str(APP_DIR),
+    }
+
+@app.get("/health")
+def health():
+    # Vérifications rapides
+    ffmpeg_ok, ffmpeg_out, _ = run_cmd(["ffmpeg", "-version"])
+    ytdlp_ok, ytdlp_out, _ = run_cmd(["yt-dlp", "--version"])
+    checks = {
+        "python": os.sys.version.split()[0],
+        "ffmpeg": ffmpeg_out.splitlines()[0] if ffmpeg_ok else "NOK",
+        "yt_dlp": ytdlp_out.strip() if ytdlp_ok else "NOK",
+        "app.py_exists": APP_PY.is_file(),
+        "clean_json.py_exists": CLEAN_PY.is_file(),
+        "hf_token_present": bool(os.environ.get("HUGGINGFACE_TOKEN")),
+        "output_dir": str(OUTPUT_DIR),
+    }
+    if not checks["app.py_exists"]:
+        raise HTTPException(status_code=500, detail=f"app.py introuvable: {APP_PY}")
+    if not checks["clean_json.py_exists"]:
+        raise HTTPException(status_code=500, detail=f"clean_json.py introuvable: {CLEAN_PY}")
+    return {"status": "ok", "checks": checks}
+
+@app.post("/transcribe")
+def transcribe(req: TranscribeReq):
+    ensure_exists(APP_PY, "file")
+    out_path = Path(req.output).resolve() if req.output else safe_output_path("transcription")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "python", str(APP_PY),
+        "--input", req.input,
+        "--output", str(out_path),
+        "--subs-lang", req.subs_lang,
+    ]
+    if req.allow_auto:
+        cmd.append("--allow-auto")
+    if req.num_speakers is not None:
+        cmd += ["--num-speakers", str(req.num_speakers)]
+    if req.keep_metadata:
+        cmd.append("--keep-metadata")
+
+    ok, stdout, stderr = run_cmd(cmd, cwd=APP_DIR)
+    if not ok:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Échec transcription",
+                "cmd": " ".join(shlex.quote(c) for c in cmd),
+                "stderr": stderr[-4000:],
+                "stdout": stdout[-2000:]
+            }
+        )
+    if not out_path.is_file():
+        raise HTTPException(status_code=500, detail=f"Sortie non trouvée: {out_path}")
+
+    payload = {
+        "status": "ok",
+        "cmd": " ".join(shlex.quote(c) for c in cmd),
+        "output_path": str(out_path),
+        "summary": summarize_json(out_path),
+    }
+    if req.return_json:
+        try:
+            payload["json"] = json.loads(out_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            payload["json_error"] = str(e)
+    return payload
+
+@app.post("/clean")
+def clean(req: CleanReq):
+    ensure_exists(CLEAN_PY, "file")
+    in_path = Path(req.input).resolve()
+    ensure_exists(in_path, "file")
+    out_path = Path(req.output).resolve() if req.output else safe_output_path(in_path.stem + ".cleaned")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "python", str(CLEAN_PY),
+        "--input", str(in_path),
+        "--output", str(out_path),
+        "--window-sec", str(req.window_sec),
+        "--sim-drop", str(req.sim_drop),
+        "--near-merge-gap", str(req.near_merge_gap),
+        "--near-merge-sim", str(req.near_merge_sim),
+    ]
+
+    ok, stdout, stderr = run_cmd(cmd, cwd=APP_DIR)
+    if not ok:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Échec cleaning",
+                "cmd": " ".join(shlex.quote(c) for c in cmd),
+                "stderr": stderr[-4000:],
+                "stdout": stdout[-2000:]
+            }
+        )
+    if not out_path.is_file():
+        raise HTTPException(status_code=500, detail=f"Sortie non trouvée: {out_path}")
+
+    payload = {
+        "status": "ok",
+        "cmd": " ".join(shlex.quote(c) for c in cmd),
+        "output_path": str(out_path),
+        "summary": summarize_json(out_path),
+    }
+    if req.return_json:
+        try:
+            payload["json"] = json.loads(out_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            payload["json_error"] = str(e)
+    return payload
 
