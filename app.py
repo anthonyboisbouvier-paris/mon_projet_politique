@@ -1,220 +1,464 @@
-# app.py
-# Nettoyage agressif des répétitions dans un JSON {meta, utterances[], text}
-# Post-traitement sûr : ne modifie pas l'étape d'ASR/diarisation.
-# Usage typique (Colab) :
-#   python /content/app.py \
-#       --input-json  /content/outputs/json/jancovici_full.json \
-#       --output-json /content/outputs/json/jancovici_full.cleaned.json \
-#       --sim-drop 0.95 --seq-ratio 0.95 --ngram-n 3 --max-ngram-repeat 24 --min-clause-chars 18
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-import argparse
-import json
+"""
+app.py — YouTube -> ASR (+diarisation si dispo) -> JSON propre (anti-répétitions agressif)
+Sortie: {"meta": {...}, "utterances": [...], "text": "..."}
+"""
+
+import os
 import re
-import unicodedata
+import json
+import argparse
+import tempfile
+import subprocess
+from collections import deque
 from difflib import SequenceMatcher
-from pathlib import Path
-from typing import List, Dict, Any
 
-# ----------------------------
-# Utils de normalisation/matching
-# ----------------------------
-SENT_SPLIT = re.compile(r'(?<=[\.\?\!\u2026;:])\s+|[\n\r]+')  # fins de phrases usuelles ou sauts de ligne
-WS = re.compile(r'\s+')
-PUNCT = re.compile(r'[^\w]+', re.UNICODE)
+# ---------------------------
+# Utils I/O
+# ---------------------------
 
-def strip_accents(s: str) -> str:
-    return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+def run(cmd):
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p.returncode != 0:
+        raise RuntimeError(f"Command failed: {' '.join(cmd)}\nSTDERR:\n{p.stderr}")
+    return p.stdout.strip()
 
-def normalize_for_match(s: str) -> str:
-    s = strip_accents(s.lower())
-    s = PUNCT.sub(' ', s)
-    return WS.sub(' ', s).strip()
+def download_audio(url, out_dir):
+    """Télécharge l'audio via yt-dlp et renvoie le chemin wav."""
+    audio_path = os.path.join(out_dir, "audio.wav")
+    # Meilleur effort: 160k opus -> wav
+    cmd = [
+        "yt-dlp", "-x", "--audio-format", "wav", "--audio-quality", "0",
+        "-o", os.path.join(out_dir, "dl.%(ext)s"),
+        url
+    ]
+    try:
+        run(cmd)
+    except Exception as e:
+        raise RuntimeError(f"Echec yt-dlp: {e}")
 
-def sent_tokenize(text: str) -> List[str]:
-    parts = [p.strip() for p in SENT_SPLIT.split(text) if p and p.strip()]
-    if len(parts) <= 1:
-        parts = [p.strip() for p in re.split(r',(?!\d)', text) if p.strip()]
-    return parts
+    # chercher le wav
+    cand = [f for f in os.listdir(out_dir) if f.endswith(".wav")]
+    if not cand:
+        raise RuntimeError("Aucun .wav trouvé après yt-dlp.")
+    src = os.path.join(out_dir, cand[0])
+    if src != audio_path:
+        os.replace(src, audio_path)
+    return audio_path
 
-def tokens(text: str) -> List[str]:
-    return [t for t in re.split(r'\s+', text) if t]
+# ---------------------------
+# ASR
+# ---------------------------
 
-def collapse_adjacent_repeats(text: str, max_ngram: int = 20) -> str:
-    """Supprime A A A... où A est un n-gramme contigu (jusqu'à max_ngram tokens)."""
-    toks = tokens(text)
-    out = []
-    i = 0
-    while i < len(toks):
-        kmax = min(max_ngram, (len(toks) - i) // 2)
-        chosen_k = 0
-        for k in range(kmax, 0, -1):
-            left = ' '.join(toks[i:i+k])
-            right = ' '.join(toks[i+k:i+2*k])
-            if normalize_for_match(left) == normalize_for_match(right):
-                chosen_k = k
-                break
-        if chosen_k:
-            out.extend(toks[i:i+chosen_k])
-            i += 2 * chosen_k
-            # A A A... : saute les occurrences suivantes
-            while i + chosen_k <= len(toks):
-                seg = ' '.join(toks[i:i+chosen_k])
-                if normalize_for_match(seg) == normalize_for_match(' '.join(out[-chosen_k:])):
-                    i += chosen_k
-                else:
-                    break
-        else:
-            out.append(toks[i])
-            i += 1
-    return ' '.join(out)
+def asr_faster_whisper(audio_path, lang, device):
+    try:
+        from faster_whisper import WhisperModel
+    except Exception as e:
+        raise RuntimeError("faster-whisper non disponible. Installez-le ou laissez l'app basculer sur 'whisper' : pip install faster-whisper") from e
 
-def ngram_set(s: str, n: int = 3):
-    w = normalize_for_match(s).split()
-    if len(w) < n:
-        n = 2 if len(w) >= 2 else 1
-    return {' '.join(w[i:i+n]) for i in range(0, max(0, len(w)-n+1))}
+    compute = "float16" if device == "cuda" else "int8"
+    model_size = os.environ.get("WHISPER_MODEL", "large-v3")
+    model = WhisperModel(model_size, device=device, compute_type=compute)
 
-def jaccard(a, b) -> float:
-    if not a or not b: return 0.0
-    inter = len(a & b)
-    return 0.0 if inter == 0 else inter / float(len(a | b))
-
-def is_near_duplicate(s: str, recent_norms: List[Dict[str, Any]], sim_drop: float, seq_ratio: float, ngram_n: int) -> bool:
-    A = ngram_set(s, n=ngram_n)
-    s_norm = normalize_for_match(s)
-    for r in recent_norms:
-        if jaccard(A, r['ngrams']) >= sim_drop:
-            return True
-        if SequenceMatcher(None, r['norm'], s_norm).ratio() >= seq_ratio:
-            return True
-    return False
-
-def clean_utterance_text(raw: str, recent_norms: List[Dict[str, Any]], sim_drop: float, seq_ratio: float,
-                         ngram_n: int, max_ngram_repeat: int, min_clause_chars: int) -> str:
-    # 1) écrase les répétitions contiguës
-    collapsed = collapse_adjacent_repeats(raw, max_ngram=max_ngram_repeat)
-    # 2) découpe en phrases/propositions
-    clauses = sent_tokenize(collapsed)
-    cleaned: List[str] = []
-    local_recent: List[str] = []
-
-    for c in clauses:
-        c = c.strip()
-        if not c:
-            continue
-        if len(c) < min_clause_chars:
-            if cleaned:
-                cleaned[-1] = (cleaned[-1] + ' ' + c).strip()
-                continue
-            else:
-                cleaned.append(c)
-                continue
-
-        # dédoublonnage intra-énoncé
-        local_pack = [{'norm': normalize_for_match(x), 'ngrams': ngram_set(x, n=ngram_n)} for x in local_recent]
-        if is_near_duplicate(c, local_pack, sim_drop, seq_ratio, ngram_n):
-            continue
-        # dédoublonnage global (tous locuteurs)
-        if is_near_duplicate(c, recent_norms, sim_drop, seq_ratio, ngram_n):
-            continue
-
-        cleaned.append(c)
-        local_recent.append(c)
-        recent_norms.append({'norm': normalize_for_match(c), 'ngrams': ngram_set(c, n=ngram_n)})
-        if len(recent_norms) > 800:
-            del recent_norms[:-800]
-
-    out = ' '.join(cleaned).strip()
-    out = re.sub(r'\s+([,;:\.\?\!\u2026])', r'\1', out)
-    return out
-
-def aggressive_clean(data: Dict[str, Any],
-                     sim_drop: float = 0.95,
-                     seq_ratio: float = 0.95,
-                     ngram_n: int = 3,
-                     max_ngram_repeat: int = 24,
-                     min_clause_chars: int = 18) -> Dict[str, Any]:
-    """Nettoie data['utterances'][*]['text'] + reconstruit data['text']."""
-    utts = data.get('utterances', []) or []
-    recent_norms: List[Dict[str, Any]] = []
-    new_utts = []
-    for u in utts:
-        t = u.get('text', '') or ''
-        cleaned = clean_utterance_text(
-            t, recent_norms,
-            sim_drop=sim_drop,
-            seq_ratio=seq_ratio,
-            ngram_n=ngram_n,
-            max_ngram_repeat=max_ngram_repeat,
-            min_clause_chars=min_clause_chars
-        )
-        if cleaned:
-            nu = dict(u)
-            nu['text'] = cleaned
-            new_utts.append(nu)
-
-    data['utterances'] = new_utts
-    data['text'] = ' '.join(u['text'] for u in new_utts).strip()
-
-    # On garde les métadonnées existantes et on trace les options de nettoyage
-    opts = data.get('options', {})
-    opts['cleaning'] = {
-        'sim_drop': sim_drop,
-        'seq_ratio': seq_ratio,
-        'ngram_n': ngram_n,
-        'max_ngram_repeat': max_ngram_repeat,
-        'min_clause_chars': min_clause_chars,
-        'aggressive': True
-    }
-    data['options'] = opts
-    return data
-
-# ----------------------------
-# CLI
-# ----------------------------
-def parse_args():
-    ap = argparse.ArgumentParser(
-        description="Post-traitement agressif pour supprimer les répétitions et reconstituer un texte propre."
+    segments_iter, info = model.transcribe(
+        audio_path,
+        language=lang,
+        vad_filter=True,
+        word_timestamps=True
     )
-    ap.add_argument('--input-json', required=True, help='Chemin du JSON brut (sortie de ton pipeline ASR/diarisation).')
-    ap.add_argument('--output-json', required=False, help='Chemin du JSON nettoyé (défaut: *.cleaned.json à côté).')
 
-    # Seuils/paramètres (par défaut agressifs)
-    ap.add_argument('--sim-drop', type=float, default=0.95, help='Seuil Jaccard n-gram pour drop.')
-    ap.add_argument('--seq-ratio', type=float, default=0.95, help='Seuil difflib SequenceMatcher pour drop.')
-    ap.add_argument('--ngram-n', type=int, default=3, help='n pour les n-grammes du Jaccard.')
-    ap.add_argument('--max-ngram-repeat', type=int, default=24, help='Longueur max des n-grammes contigus à effondrer.')
-    ap.add_argument('--min-clause-chars', type=int, default=18, help='Longueur minimale d’une clause conservée.')
-    return ap.parse_args()
+    words = []
+    segments = []
+    for seg in segments_iter:
+        segments.append({
+            "start": float(seg.start),
+            "end": float(seg.end),
+            "text": seg.text.strip()
+        })
+        if seg.words:
+            for w in seg.words:
+                if w.word is None: 
+                    continue
+                words.append({
+                    "start": float(w.start) if w.start is not None else float(seg.start),
+                    "end": float(w.end) if w.end is not None else float(seg.end),
+                    "word": w.word
+                })
+        else:
+            # fallback: découpe grossière au segment
+            for token in seg.text.strip().split():
+                words.append({
+                    "start": float(seg.start),
+                    "end": float(seg.end),
+                    "word": token
+                })
+    return words, segments, {"model": f"faster-whisper:{model_size}", "language": lang, "duration": getattr(info, "duration", None)}
+
+def asr_whisper(audio_path, lang, device):
+    try:
+        import whisper
+    except Exception as e:
+        raise RuntimeError("openai-whisper non disponible. Installez-le : pip install -U openai-whisper") from e
+
+    model_size = os.environ.get("WHISPER_MODEL", "large")
+    model = whisper.load_model(model_size, device=device if device in ("cuda","cpu") else "cpu")
+    # note: whisper officiel n'a pas de word timestamps fiables sans extra
+    result = model.transcribe(audio_path, language=lang, verbose=False)
+    words = []
+    segments = []
+    for s in result.get("segments", []):
+        segments.append({
+            "start": float(s.get("start", 0.0)),
+            "end": float(s.get("end", 0.0)),
+            "text": s.get("text","").strip()
+        })
+        # sans word-level, on tokenise grossièrement
+        for token in s.get("text","").split():
+            words.append({
+                "start": float(s.get("start", 0.0)),
+                "end": float(s.get("end", 0.0)),
+                "word": token
+            })
+    return words, segments, {"model": f"openai-whisper:{model_size}", "language": lang, "duration": None}
+
+def transcribe(audio_path, lang="fr", device="cuda"):
+    # priorité à faster-whisper pour les timestamps de mots
+    try:
+        return asr_faster_whisper(audio_path, lang, device)
+    except Exception as e_fw:
+        print(f"[INFO] faster-whisper indisponible ({e_fw}). Bascule sur whisper.")
+        return asr_whisper(audio_path, lang, device if device in ("cuda","cpu") else "cpu")
+
+# ---------------------------
+# Diarisation
+# ---------------------------
+
+def diarize_pyannote(audio_path, model_id="pyannote/speaker-diarization-3.1", num_speakers=None, hf_token=None):
+    try:
+        from pyannote.audio import Pipeline
+    except Exception as e:
+        raise RuntimeError("pyannote.audio non disponible. Installez-le pour la diarisation, ou laissez l'app continuer sans.") from e
+
+    if hf_token is None:
+        hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+    if not hf_token:
+        raise RuntimeError("Token HuggingFace requis pour ce modèle pyannote (définissez HF_TOKEN).")
+
+    pipeline = Pipeline.from_pretrained(model_id, use_auth_token=hf_token)
+    diar = pipeline(audio=audio_path, num_speakers=num_speakers)
+    # Convertir en segments triés
+    segs = []
+    for turn, _, speaker in diar.itertracks(yield_label=True):
+        segs.append({
+            "start": float(turn.start),
+            "end": float(turn.end),
+            "speaker": str(speaker)
+        })
+    segs.sort(key=lambda x: (x["start"], x["end"]))
+    # Normaliser label en SPEAKER_XX
+    remap = {}
+    next_id = 0
+    for s in segs:
+        if s["speaker"] not in remap:
+            remap[s["speaker"]] = f"SPEAKER_{next_id:02d}"
+            next_id += 1
+        s["speaker"] = remap[s["speaker"]]
+    return segs
+
+def fallback_single_speaker(words):
+    # un seul locuteur si pas de diarisation
+    return [{"start": 0.0, "end": words[-1]["end"] if words else 0.0, "speaker": "SPEAKER_00"}]
+
+def assign_words_to_speakers(words, diarization_segments):
+    """Assigne chaque mot au locuteur dont le segment contient le milieu du mot."""
+    if not diarization_segments:
+        diarization_segments = fallback_single_speaker(words)
+
+    diarization_segments = sorted(diarization_segments, key=lambda x: (x["start"], x["end"]))
+    # Index linéaire
+    utts = []
+    cur_speaker = None
+    cur_words = []
+    cur_start = None
+    cur_end = None
+
+    def flush():
+        nonlocal cur_words, cur_speaker, cur_start, cur_end
+        if cur_words:
+            utts.append({
+                "speaker": cur_speaker,
+                "start": float(cur_start),
+                "end": float(cur_end),
+                "text": " ".join(w["word"] for w in cur_words).strip()
+            })
+        cur_words = []
+        cur_speaker = None
+        cur_start = None
+        cur_end = None
+
+    # helper pour trouver le speaker courant par temps
+    i = 0
+    n = len(diarization_segments)
+    for w in words:
+        mid = (w["start"] + w["end"]) / 2.0
+        # avancer i tant que segment i ne couvre pas mid
+        while i < n and not (diarization_segments[i]["start"] <= mid <= diarization_segments[i]["end"]):
+            if i+1 < n and diarization_segments[i+1]["start"] <= mid:
+                i += 1
+            else:
+                break
+        # choisir seg couvrant mid si possible, sinon le plus proche
+        spk = None
+        if 0 <= i < n and diarization_segments[i]["start"] <= mid <= diarization_segments[i]["end"]:
+            spk = diarization_segments[i]["speaker"]
+        else:
+            # plus proche
+            best = None
+            for j in range(max(0,i-2), min(n, i+3)):
+                d = min(abs(mid - diarization_segments[j]["start"]), abs(mid - diarization_segments[j]["end"]))
+                if best is None or d < best[0]:
+                    best = (d, diarization_segments[j]["speaker"])
+            spk = best[1] if best else "SPEAKER_00"
+
+        if cur_speaker is None:
+            cur_speaker = spk
+            cur_start = w["start"]
+            cur_end = w["end"]
+            cur_words = [w]
+        elif spk == cur_speaker:
+            cur_words.append(w)
+            cur_end = w["end"]
+        else:
+            flush()
+            cur_speaker = spk
+            cur_start = w["start"]
+            cur_end = w["end"]
+            cur_words = [w]
+    flush()
+    # fusionner micro-utt très courtes (bruit)
+    merged = []
+    for u in utts:
+        if merged and u["speaker"] == merged[-1]["speaker"] and (u["end"] - u["start"] < 0.5):
+            merged[-1]["text"] = (merged[-1]["text"] + " " + u["text"]).strip()
+            merged[-1]["end"] = u["end"]
+        else:
+            merged.append(u)
+    return merged
+
+# ---------------------------
+# Nettoyage agressif anti-répétitions
+# ---------------------------
+
+_SENT_SPLIT = re.compile(r'(?<=[\.\!\?\:;])\s+')
+_WS = re.compile(r'\s+')
+
+def normalize_text(s: str) -> str:
+    s = s.replace("\u00A0", " ")
+    s = re.sub(r'[’`]', "'", s)
+    s = re.sub(r'\s+([,;:\.\!\?])', r'\1', s)   # pas d'espace avant ponctuation finale
+    s = _WS.sub(" ", s)
+    return s.strip()
+
+def collapse_stutters(s: str) -> str:
+    # supprime répétitions immédiates de mots courts / syllabes (e.g., "qu'on qu'on", "le le")
+    s = re.sub(r'\b(\w{1,4})(?:\s+\1){1,}\b', r'\1', s, flags=re.IGNORECASE)
+    # supprime les doublons immédiats de groupes de mots (2–8 tokens)
+    tokens = s.split()
+    n = len(tokens)
+    i = 0
+    out = []
+    while i < n:
+        consumed = False
+        # essayer du plus long au plus court
+        for L in range(min(8, n - i), 1, -1):
+            a = tokens[i:i+L]
+            b = tokens[i+L:i+2*L]
+            if a and b and a == b:
+                out.extend(a)
+                i += 2*L
+                consumed = True
+                break
+        if not consumed:
+            out.append(tokens[i])
+            i += 1
+    return " ".join(out)
+
+def remove_internal_ngrams(s: str, max_ng=8):
+    # supprime n-grammes internes répétés (même s'ils ne sont pas adjacents) de manière agressive
+    tokens = s.split()
+    seen_spans = set()
+    i = 0
+    out = []
+    while i < len(tokens):
+        removed = False
+        for L in range(min(max_ng, len(tokens) - i), 3, -1):
+            ngram = tuple(tokens[i:i+L])
+            # si cet ngram apparaît déjà dans la sortie récente -> skip
+            if L >= 4 and ngram in seen_spans:
+                i += L
+                removed = True
+                break
+        if not removed:
+            out.append(tokens[i])
+            # mémoriser n-grammes récents pour future détection
+            for L in range(4, min(max_ng, len(out)) + 1):
+                seen_spans.add(tuple(out[-L:]))
+            i += 1
+    return " ".join(out)
+
+def similar(a: str, b: str) -> float:
+    return SequenceMatcher(None, a, b).ratio()
+
+def cross_utterance_dedup(utterances, sim_thr=0.92, window=60):
+    """
+    Supprime les phrases quasi-identiques à celles déjà dites récemment (tous locuteurs confondus).
+    """
+    recent = deque(maxlen=window)
+    cleaned = []
+    for u in utterances:
+        sents = [x.strip() for x in _SENT_SPLIT.split(normalize_text(u["text"])) if x.strip()]
+        kept = []
+        for sent in sents:
+            dup = any(similar(sent, old) >= sim_thr for old in recent)
+            if not dup:
+                kept.append(sent)
+                recent.append(sent)
+        text_clean = " ".join(kept).strip()
+        new_u = dict(u)
+        new_u["text"] = text_clean
+        cleaned.append(new_u)
+    # enlever utt vides
+    cleaned = [u for u in cleaned if u["text"]]
+    return cleaned
+
+def clean_utterance_text(s: str, ultra=True):
+    s = normalize_text(s)
+    s = collapse_stutters(s)
+    if ultra:
+        s = remove_internal_ngrams(s, max_ng=10)
+    return normalize_text(s)
+
+def aggressively_clean(utterances, ultra=True):
+    # 1) intra-utt
+    for u in utterances:
+        u["text"] = clean_utterance_text(u["text"], ultra=ultra)
+    # 2) inter-utt
+    utterances = cross_utterance_dedup(utterances, sim_thr=0.92, window=80)
+    # 3) fusionne consécutifs même speaker après nettoyage
+    merged = []
+    for u in utterances:
+        if merged and merged[-1]["speaker"] == u["speaker"]:
+            # si proche et court, fusionne
+            if u["start"] - merged[-1]["end"] < 1.5:
+                merged[-1]["text"] = (merged[-1]["text"] + " " + u["text"]).strip()
+                merged[-1]["end"] = u["end"]
+            else:
+                merged.append(u)
+        else:
+            merged.append(u)
+    # 4) deuxième passe légère pour retirer duplications introduites par fusion
+    for u in merged:
+        u["text"] = collapse_stutters(u["text"])
+    # drop vides
+    merged = [u for u in merged if u["text"]]
+    return merged
+
+# ---------------------------
+# Build final text
+# ---------------------------
+
+def build_full_text(utterances):
+    # Concaténation simple par ordre temporel, sans tags locuteur dans "text"
+    parts = []
+    for u in utterances:
+        if u["text"]:
+            parts.append(u["text"])
+    text = " ".join(parts).strip()
+    return normalize_text(text)
+
+# ---------------------------
+# Main
+# ---------------------------
 
 def main():
-    args = parse_args()
-    in_path = Path(args.input_json)
-    if not in_path.exists():
-        raise FileNotFoundError(f"Fichier introuvable : {in_path}")
+    ap = argparse.ArgumentParser(description="YouTube -> ASR -> (Diarisation) -> JSON propre")
+    ap.add_argument("--url", type=str, required=True, help="URL YouTube")
+    ap.add_argument("--lang", type=str, default="fr", help="Langue forcée pour l'ASR (ex: fr)")
+    ap.add_argument("--device", type=str, default="cuda", choices=["cuda","cpu"], help="cuda ou cpu")
+    ap.add_argument("--num_speakers", type=int, default=None, help="Hint nombre de locuteurs pour la diarisation")
+    ap.add_argument("--diarization_model", type=str, default="pyannote/speaker-diarization-3.1", help="Modèle pyannote")
+    ap.add_argument("--out", type=str, default="/content/output.json", help="Chemin du JSON de sortie")
+    ap.add_argument("--no_diarization", action="store_true", help="Désactiver la diarisation pyannote")
+    ap.add_argument("--ultra_clean", action="store_true", help="Nettoyage hyper agressif (par défaut True)")
+    args = ap.parse_args()
 
-    out_path = Path(args.output_json) if args.output_json else in_path.with_suffix('').with_name(in_path.stem + '.cleaned.json')
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    ultra_flag = True if args.ultra_clean or True else False  # agressif par défaut
 
-    with open(in_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    with tempfile.TemporaryDirectory() as tmp:
+        # 1) download
+        audio_path = download_audio(args.url, tmp)
 
-    # Conserve meta en-tête si présente ; sinon ne crée rien de plus.
-    # (Le nettoyeur ne touche pas data['meta'].)
+        # 2) ASR
+        words, segments, asr_info = transcribe(audio_path, lang=args.lang, device=args.device)
 
-    cleaned = aggressive_clean(
-        data,
-        sim_drop=args.sim_drop,
-        seq_ratio=args.seq_ratio,
-        ngram_n=args.ngram_n,
-        max_ngram_repeat=args.max_ngram_repeat,
-        min_clause_chars=args.min_clause_chars
-    )
+        # 3) Diarisation
+        diar_segments = []
+        if not args.no_diarization:
+            try:
+                diar_segments = diarize_pyannote(
+                    audio_path,
+                    model_id=args.diarization_model,
+                    num_speakers=args.num_speakers,
+                    hf_token=os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+                )
+            except Exception as e:
+                print(f"[INFO] Diarisation indisponible ({e}). On continue avec un seul locuteur.")
+                diar_segments = fallback_single_speaker(words)
+        else:
+            diar_segments = fallback_single_speaker(words)
 
-    with open(out_path, 'w', encoding='utf-8') as f:
-        json.dump(cleaned, f, ensure_ascii=False, indent=2)
+        # 4) mots -> utterances par speaker
+        utterances = assign_words_to_speakers(words, diar_segments)
 
-    print(f"[OK] JSON nettoyé écrit dans : {out_path}")
+        # 5) nettoyage agressif anti-répétitions
+        utterances = aggressively_clean(utterances, ultra=ultra_flag)
 
-if __name__ == '__main__':
+        # 6) texte global
+        full_text = build_full_text(utterances)
+
+        # 7) meta
+        meta = {
+            "source": "YouTube",
+            "video_url": args.url,
+            "subs_lang": os.environ.get("SUBS_LANG", "fr,fr-FR,fr-CA"),
+            "allow_auto_subs": True,
+            "diarization_model": args.diarization_model if not args.no_diarization else None,
+            "num_speakers_request": args.num_speakers,
+            "device": args.device,
+            "asr_model": asr_info.get("model"),
+            "language": asr_info.get("language"),
+            "duration_sec": asr_info.get("duration"),
+            "cleaning": {
+                "ultra_aggressive": True,
+                "cross_speaker_dedup_similarity": 0.92,
+                "window_sentences": 80,
+                "intra_ngram_max": 10
+            }
+        }
+
+        # 8) sortie
+        out = {
+            "meta": meta,
+            "utterances": utterances,
+            "text": full_text
+        }
+        os.makedirs(os.path.dirname(args.out), exist_ok=True)
+        with open(args.out, "w", encoding="utf-8") as f:
+            json.dump(out, f, ensure_ascii=False, indent=2)
+
+        print(f"[OK] JSON écrit -> {args.out}")
+
+if __name__ == "__main__":
     main()
