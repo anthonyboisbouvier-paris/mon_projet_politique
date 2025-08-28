@@ -1,0 +1,422 @@
+{
+  "meta": {
+    "source": "YouTube",
+    "video_url": "https://www.youtube.com/watch?v=cTePa6vmeag",
+    "subs_lang": "fr,fr-FR,fr-CA",
+    "allow_auto_subs": true,
+    "diarization_model": "pyannote/speaker-diarization-3.1",
+    "num_speakers_request": 2,
+    "device": "cuda"
+  },
+  "text": "Il est 8h32, vous êtes bien sur RMC et BFM TV. Bonjour Jean-Marc Jeanchud ici. Bonjour. Merci d'être avec moi ce matin. Ça fait un petit bout de temps qu'on vous entendait moins et puis vous revenez. Euh certains vous prêtent même des ambitions présidentielles. Alors soit pour vous soit pour d'autres à qui euh vous donneriez le bon logiciel. Jean-Marc Jeancovici, vous êtes un ingénieur spécialisé dans l'énergie, le climat, vous êtes consultant, conférencier et vous êtes à la tête du Shift Project. Il y a la fast fashion, il y a la fin des il y a peut-être la fin du tout électrique. En tout cas, c'est ce que nous disent les fabricants d'automobiles. Il y a la fin de de l'ambition d'une industrie verte ou en tout cas un changement de stratégie dans la plupart des très grosses entreprises. Il y a le retour des néonicotinoïdes, il y a la fronde des entreprises contre les normes écolo. Est-ce que finalement l'écologie c'est pas en train de passer de mode? Il Il vaudrait mieux pas. Ça dépend de quoi on parle. Si on parle des problèmes à résoudre, il passe malheureusement pas du tout de mode euh puisque pas plus tard que il y a quelques minutes sur cette antenne, vous avez parlé d'une averse de grê qui enfin actuellement d'un épisode de Grê qui avait fait des gros dégâts. Euh bah par exemple alors en France l'étude scientifique n'a pas été faite mais aux États-Unis on a montré que le réchauffement climatique augmentait la taille des grélons. Euh oui donc ça passe pas du tout de mode. Euh ce qui peut éventuellement passer de mode, c'est l'attention qu'on y accorde. Euh mais ça c'est comme je sais pas si quelqu'un qui a un problème de temps en temps, il pense un peu moins. Ça veut pas dire que le problème n'existe plus. Donc le problème est là, les solutions simplement un peu moins les limites planétaires sont bien là et elles se renforcent chaque jour. Euh ce qui peut éventuellement en ce moment être ressenti, enfin moi je je le décris comme ça, c'est une forme de confusion. Euh c'est-à-dire que on a cet éternel débat fin du monde, fin du mois avec des difficultés à faire se rejoindre la préoccupation environnementale et la préoccupation sociale par exemple, ce qu'on a vu dans les fe, la préoccupation économique et la préoccupation environnementale aussi. Alors, sur les normes pour les entreprises par exemple, c'est ce qui est mis en avant. Ne mettez pas de normes parce que ça nous empêche de faire des affaires. Euh moi je ne pense pas que les normes environnementales empêchent les clients de venir, voyez, par exemple. Donc c'est pas parce que on va demander aux entreprises de faire un rapport en moins que les clients vont se précipiter. C'est je pense que c'est deux problèmes totalement disjoins. Euh donc les ce qui ce qui se passe en ce moment, c'est que on est en train de rentrer un peu plus dans le dur. Euh mais moi ça m'étonne pas du tout euh parce que c'est ce qui doit normalement se passer quand on s'occupe pas des problèmes et une fois qu'on est un peu plus dans le dur bah on a tendance à se dire euh ah bah justement ce qui cause les problèmes, on va quand même moins s'en occuper parce que on a la tête ailleurs. Mais c'est forme d'illusion d'optique. Une illusion que on a la tête ailleurs. Une illusion d'optique. Mais je vais quand même rentrer dans je vais rentrer dans le dur en effet et rattraper par la patrouille comme vous dites. Vous vous plaidez par exemple pour le durable, vous plaidez pour une consommation durable, pour le fait par exemple de prendre moins l'avion, vous avez même avancé le chiffre éventuellement de 4 vols par vie et par habitant. Et dans le même temps, la Fast Fashion qui est aujourd'hui à la une de l'actualité puisque les sénateurs vont peut-être adopter une loi contre Chine et Temu notamment, euh la fast fashion, c'est que les consommateurs français malgré tout à un moment, ils préfèrent acheter un t-shirt à 5 € qui certes lui aura pris l'avion. Donc certes eux peut-être moins, mais le t-shirt lui il aura pris l'avion. Bah toute la difficulté de moins, mais le t-shirt lui il aura pris l'avion. Bah toute la difficulté de cette affaire c'est de faire se rejoindre l'environnement et l'économie. C'est-à-dire que à un moment, si on veut avoir des gestes qui sont entre guillemets vertueux pour l'environnement, al il faut bien comprendre que vertueux pour l'environnement infiné, c'est vertu pour nous-même. Sans environnement, vous et moi, on mange pas, vous et moi, on n pas d'activité. Enfin, je veux dire, l'environnement, c'est notre planète. Il y en a pas d'autres habitables dans le système solaire. Il y en a pas d'autres habitables nulle part. Et de toute façon, même s'il y en avait une habitable ailleurs, on déménage pas, on déménagerait pas l'humanité maison commune. Donc, c'est le fameux Il n'y a pas de planète B. Oui, et c'est surtout notre maison commune. Je veux dire, si on est là aujourd'hui dans ce studio, c'est parce que on a un environnement qui nous a été favorable, bourré de ressources naturelles, qui nous permet simplement de respirer, de manger, de et cetera. Il faut bien comprendre que sans environnement, on handicape très fortement toutes nos autres activités. Enfin, sans environnement en bon état, j'ai envie de dire. C'est ça qui nous a fait. Euh donc l'idée queon puisse séparer les deux et queon puisse mener nos activités ordinaires, j'ai envie de dire produire, acheter et cetera dans un monde dans lequel on s'occupe pas d'environnement, c'est une illusion d'optique. Mais ça lequel on s'occupe pas d'environnement, c'est une illusion d'optique. Mais ça veut dire qu'on fait quoi? Typiquement là, vous seriez sénateur, vous interdiriez alors il s'apprêtent peut-être à interdire les publicités sur la fast fashion comme on dit, voir même peut-être à taxer, rajouter 10 € peut-être par colis qui viendrait de Chinou de de Temu. Est-ce qu'il faut carrément interdire parce que ce qui ce Chinou de Temu. Est-ce qu'il faut carrément interdire parce que ce qui ce qui lu cette histoire, c'est qu'aujourd'hui on a beaucoup de mal à comment dire orienter les activités économiques en fonction de leur pression sur l'environnement. C'est-à-dire comme l'environnement vaut rien par convention hein dans dans les activités économiques. Quand vous achetez quelque chose en fait ce que vous payez ça n'est que des revenus humains. D'accord? Le chose en fait ce que vous payez ça n'est que des revenus humains. D'accord? Le prix de ce pull, ça n'est que des gens qui ont travaillé pour construire l'usine, pour faire pousser, enfin pour élever les moutons, pour et cetera, mais ça n'est absolument pas la nature. À aucun moment, on la paye. Donc aujourd'hui, on a réussi, on réussit pas à faire se rejoindre la question économique et la question environnementale. Ce qu'il faudrait faire effectivement pour pas que la phase fashion déferle sur nous, c'est tout simplement que les vêtements coûtent plus cher. Donc c'est une tout simplement que les vêtements coûtent plus cher. Donc c'est une question de prix. Oui. Enfin, à un moment, c'est une question soit de prix, soit de réglementation. Mais la réglementation reviendrait à dire tel ou tel type de procédé de fabrication ou tel ou tel type de et cetera, c'est interdit. Et Jean-Marc Jeancovici, le recyclage est-ce que le est-ce que recycler ces produits ça ça pourrait être Alors recycler ça évite pas les émissions de fabrication euh quand vous être Alors, recycler, ça évite pas les émissions de fabrication euh quand vous fabriquez un vêtement à partir de recycler, euh quand vous y arrivez parce que tout ce qui est composite par exemple, vous savez tous les vêtements sur lesquels il y a marqué x % coton, x % polyester ou et cetera, en fait c'est très difficile à recycler parce qu'il faudrait séparer les matériaux qui sont dans votre vêtement et ça c'est quasiment infaisable. Donc déjà tout ce qui est hybride vous recyclez pas et pour les matériaux qui sont purs, le recyclage c'est pas toujours très facile à faire. Euh et surtout les vêtements qui sont fabriqués à l'étranger, ils seront jamais fabriqués avec des fibres qui vont être recyclées en France. Donc qui vont être recyclées en France. Donc on fait quoi? On augmente le prix. Donc si on veut bah il faut qu'on arrive à se dire collectivement que c'est pas très grave si on a une garde-robe un peu moins garnie. C'est ça à la base. C'est grave si on a une garde-robe un peu moins garnie. C'est ça. Au fond au fond pour vous quand vous dites quatre vols par exemple dans une vie combien de t-shirts, combien de pulls? en arri euh bah il fut d'une époque où on en avait beaucoup moins. Euh je veux dire qu je dans une vie je veux dire je en avait beaucoup moins. Euh je veux dire qu je dans une vie je veux dire je veux dire moi il y a un exemple que je prends souvent c'est que mon père qui était prof de fac donc pas vraiment un pauvre euh et ben je me rappelle très bien que quand j'étais enfant il avait des vestes qui étaient rapié au coude. bien que quand j'étais enfant il avait des vestes qui étaient rapié au coude. Donc mon père qui était prof de fac supérieur à l'époque où j'étais enfant on jetait pas un vêtement qui avait un trou au coude. Donc c'est même pas une trou au coude. Donc c'est même pas une question d'argent c'est une question de consommation de mode de consommation. C'était bah l'un va avec l'autre. Euh il faut bien voir que le prix réel d'un vêtement aujourd'hui, il doit être 50 à 100 fois inférieur à ce qu'il était il y a un siècle. La fin des ADFE Jean-Marc question d'argent c'est une question de consommation de mode de consommation. La fin des ADFE Jean-Marc Jeancovici, la fin des EDFE, est-ce que c'est un drame absolu ou est-ce que c'est une réponse au fait que un certain nombre de Français se sentaient exclus? c'est une réponse au fait que un certain nombre de Français se sentaient exclus? Alors, c'est un coup de balancier excessif dans l'autre sens. après un coup de balancier euh enfin je veux dire on a commencé par dire on va régler le problème de la pollution locale en interdisant l'accès. Il y avait d'autres moyens de régler ou plus exactement interdisant l'accès. Il y avait d'autres moyens de de régler ou plus exactement l'excès l'excès de zel écolo a entraîné un rejet. C'est ça ce que vous êtes en train de dire. Souvent la politique un rejet. Souvent la politique publique c'est des balanciers. Vous savez ça va d'un côté puis ça revient de l'autre puis cetera. Euh donc là, on s'est dit, on va traiter le problème de la pollution locale en interdisant l'accès aux véhicules les plus polluants. Est-ce que l'accès aux véhicules les plus polluants. Est-ce que Est-ce que aujourd'hui vous estimez donc que il fallait ni interdire avant ni supprimer totalement les ZFE aujourd'hui? Alors, fallait ni interdire avant ni supprimer totalement les ZFE aujourd'hui? Alors, je vais pas regarder le dossier des ZFE en détail parce que c'est pas vraiment un problème de climat. Les ZFE, c'est un problème de pollution locale. D'accord? C'est un peu différent. Euh on n' pas fait ça pour limiter les émissions de CO2, on a fait ça pour limiter la pollution locale. Alors, il y a CO2, on a fait ça pour limiter la pollution locale. Alors, il y a plusieurs manières de s'y prendre si on veut limiter la pollution locale. On peut interdire la vente des véhicules les plus polluants et puis attendre que ils sortent du parc. Euh on peut interdire leur circulation. Euh on peut euh renforcer l'incitation à renflacer son véhicule pour les gens qui en possèdent. Enfin voilà, il y a on peut faire on a sué pratiquement tout ça. son véhicule pour les gens qui en possèdent. C'est-à-dire que parallèlement à ce que devaient être les ZFE, les dernières les derniers budget ont quasiment supprimé les aides à l'achat par exemple d'une d'une voiture écolo. Le bonus écolo est devenu beaucoup moins incitatif. Alors d'une voiture écolo. Alors sur le bonus euh sur le bonus et le malus, moi je pense queon a fait une erreur il y a très longtemps euh qui était d'avoir supprimé l'impôt à la détention d'un véhicule qui était la vignette. Il y avait un impôt qui était extrêmement écolo, qui était la vignette. Et en fait, on payait d'autant plus queon avait une voiture qui consommait beaucoup. On aurait très bien plus queon avait une voiture qui consommait beaucoup. On aurait très bien pu euh conserver ce système-là et à ce moment, ça aurait sur la durée dissuader les gens euh de détenir une voiture qui n'avait pas les bonnes caractéristiques. Euh de toute façon, ces choses-là doivent toujours être faites de manière progressive. Donc aujourd'hui, est-ce doivent toujours être faites de manière progressive. Donc aujourd'hui, est-ce que vous vous désolez, j'ai pas très bien compris si vous vous désolez de la fin des EDFE ou si vous vous dites de toute façon c'était pas forcément la bonne manière? Alors je ne suis ni l'un vraiment regardé. Vous estimez que c'est trop local. Je je j'ai pas vraiment regardé. Ce qui est sûr euh c'est que l'idée de baisser la pollution automobile est une bonne idée. Euh mais l'idée de baisser la pollution automobile est une bonne idée. Euh mais il y a plein de moyens enfin comment dire il y a plein de moyens euh d'y arriver. Euh par exemple quand vous construisez des pistes cyclables et que une fraction croissante des gens se mettent au vélo, euh vous diminuez la mettent au vélo, euh vous diminuez la pollution. De fait euh vous pouvez avoir une mesure qui n'est pas une mesure tout ou rien. Je veux dire la ZFE c'est tout. c'est vous interdisez toute la zone, vous pouvez interdire progressivement des axes à la circulation. Alors ça fait gueuler les gens effectivement, mais c'est moins du tout ou rien. Euh et de toute façon, il faut toujours des alternatives. Donc en fait la question c'est à partir du moment où on interdit la circulation à un certaines catégories de véhicules, c'est quelle alternative on propose à ces gens-là? Alors est-ce qu'on leur dit \"Vous avez qu'à changer de véhicule mais à ce moment on sait très bien qu'il y a une partie des gens pour lesquels c'est difficile ou est-ce qu'on leur dit autre chose? Et encore une fois, c'est un dossier local. Donc moi, j'ai pas regardé ça de près. Tout ce que je sais, c'est que dans tous les cas de figure, il faut des alternatives. Est-ce qu'il faudra sortir de la voiture Est-ce qu'il faudra sortir de la voiture quand on voit de toute façon que la vente des véhicules neufs est en chute libre? Ça c'est juste une question de temps, vous savez. C'est une question de temps, mais pour vous, on y rien. Je temps, vous savez. Je veux dire, je sais pas si ça va prendre 50 ans de siècle ou et cetera, mais c'est une question de temps. Euh alors, pourquoi est-ce que je dis c'est une question de temps? Ou plus exactement, c'est une question de temps avec 1 milliard et demi de voitures sur terre et 40 millions de voitures en France. D'accord. Euh ça c'est une question de temps parce que euh c'est très difficile de conserver des véhicules d'une tonne et demi par personne euh avec une de conserver des véhicules d'une tonne et demi par personne euh avec une énergie pas cher dans un monde dans lequel il y aura plus de pétrole et plus de gaz et plus de charbon. D'accord? Ça ça va être très difficile de toute façon. Donc de toute façon, on va vers un monde avec moins de voiture. Ça c'est façon. Ça c'est absolument certain. Et c'est là que je disais de temps en temps, enfin c'est là que je disais pardon, on va être rattrapé par la patrouille si on ne le fait pas délibérément. Il faut savoir qu'en Europe, l'approvisionnement pétrolier est déjà contraint à la baisse depuis 15 ans déjà. Et ce qui est en marché automobile en Europe, moi me surprend qu'à moitié. C'est-à-dire la la chute vertigineuse des ventes d'automobiles pour vous, ça n'est que logique. C'est pas étonnant compte tenu logique. C'est pas étonnant compte tenu de l'évolution de fond qui est celle-l faut arrêter de se battre, il faut arrêter de se battre. Il faut faut arrêter de se battre, il faut arrêter arrêter de se battre. Il faut arrêter de se Il faut jamais arrêter de arrêter de se Il faut jamais arrêter de se battre. Par contre, il faut pas se battre pour des illusions. C'est-à-dire que il faut pas courir derrière des objectifs qui sont physiquement pas atteignables. C'est-à-dire euh voilà euh coûte une industrie automobile qui de toute façon est voit. Non, ça c'est quelque chose qu'on pourrait faire aussi euh mais on le fera pas avec les règles du jeu actuell. Euh c'est quelle règle du jeu actuell. Euh c'est quelle règle du jeu qu'il faut? Des il faut refaire du protectionnisme intelligent. Si on veut avoir de l'industrie automobile en Europe, étant donné et en particulier en France, étant donné que les coûts de production sont supérieurs parce que la main d'œuvre coûte plus cher, il faut après se protéger fatalement contre les importations qui coûtent moins cher. Euh si on veut fabriquer des voitures électriques en Europe, il faut d'abord commencer par se mettre au niveau technologique des Chinois qui ont pris beaucoup d'avance. Peut-être qu'il faut faire des transferts de technologie dans l'autre sens. C'est il faut dire à BID, OK, vous vendez en Europe à la condition que vous fassiez des transferts de techno. Parce que maintenant ça devrait aller dans l'autre sens. C'est-à-dire auprès des Chinois. Il faut maintenant qu' qu'il fassent l'inverse. Bah ça pourrait être un truc à regarder puisque maintenant ils sont en avance sur nous. Ils font des voitures plus écolo, sauf jamais en avion. Pas en avion d'habitude vient vient en bateau mais elles font des kilomètres quoi. Elles d'habitude vient en bateau mais elles font des kilomètres quoi. Elles viennent en bateau. Oui. Non, c'est pas le transport de la voiture qui est le sujet. euh c'est plus la fabrication de la voiture parce que comme la batterie c'est très électrointensif pour fabriquer une batterie euh bah avec de l'électricité au charbon chinoise, même si elle est de moins en moins au charbon euh parce qu'ils font de plus en plus d'autres choses, euh les émissions de fabrication de la batterie sont bien supérieures à ce qu'elles serait si on la fabriquait en France. Jean-Marc la fabriquait en France. Jean-Marc Jeancovici, ces pannes géantes qui ont eu lieu en Espagne, au Portugal, qui ont plongé le pays pendant plus de 24 heures, parfois dans le noir. Comment vous avez vécu ça vous qui qui dites qu'à un moment ou à un autre, on sera dans une finitude, dans une limite. Oui. qu'à un moment ou à un autre, on sera dans une finitude, dans une limite. Oui. Alors, une finitude, ça veut pas dire qu'on a une panne électrique géante nécessairement. la finitude pour moi c'est plutôt qu'il faut s'habituer à consommer moins. Euh on n' pas encore l'origine de la panne sauf de ma part euh sur ce qui s'est passé en Espagne. Euh par contre ce que ça démontre de manière il y a il y a deux choses deux enseignements qu'on peut en tirer. Le premier c'est que ça montre l'extrême dépendance de notre monde moderne à l'électricité. Mais ça c'est quelque chose qu'on savait déjà. Mais ça ça le mérite de nous le rappeler. On est aujourd'hui dans un monde dans lequel sans électricité vous payez plus. Euh vous avez plus de système de transport, vous n'avez plus enfin vous il se passe tout tout est bloqué quoi. D'accord. L'économie s'arrête et une bonne partie de la vie s'arrête également. Alors Alors quand quand ça ne dure que 24 heures c'est pas très grave. Si ça devait durer beaucoup plus longtemps, ça serait beaucoup plus ennuyeux. La deuxième chose intéressante à savoir c'est que le réseau n'a redémarré que parce qu'il y avait des moyens pilotables disponibles. Donc des centrales à gaz et des centrales hydroélectriques. Donc il a fallu faire appel à des vieilles technologies vieilles des Donc il a fallu faire appel à des vieilles technologies vieilles des technologies pilotables euh voilà. Donc ce que ça montre c'est queon n'est pas sûr de pouvoir redémarrer un réseau avec pas des des technologies pas pil enfin des modes de production pas pilotables. Voilà, c'est ça c'est un autre enseignement. Quand vous dites et quand Quand vous dites et quand vous dites \"On ne sait toujours pas effectivement euh euh l'origine de la panne, ça vous paraît normal ça qu'on ne puisse pas qu'on puisse avoir une panne de cette ampleur et sans savoir d'où de cette ampleur et sans savoir d'où elle vient? Je suis pas je suis pas suffisamment spécialiste des réseaux électriques pour vous dire oui ou non. Donc je je fais comme tout le monde, j'attends. Je pense qu'on finira par savoir un jour. Mais c'est assez surprenant tout de même cette ampleur là. Bon bah, vous savez des réseaux qui se cassent la figure. Non, ça arrive de temps en temps. Il y a eu une très grosse panne au Texas, rappelez-vous, à cause d'une tempête de neige il y a il y a pas très longtemps, il y a un ou 2 ans. 2 ans. Donc de temps en temps, ça a pas très longtemps, il y a un ou 2 ans. Donc de temps en temps, ça ans. 2 ans. Donc de temps en temps, ça arrive ce genre de choses. Il faut espérer que ça arrive pas très souvent et là il faut comprendre pourquoi c'est arrivé avant d'en tirer des conclusions. et là il faut comprendre pourquoi c'est arrivé avant d'en tirer des conclusions. Jean-Marc Jeankovici, vous avez parlé d'un problème d'allocation des ressources, le fait qu'on mette tant d'argent par exemple dans l'intelligence artificielle. Je trouve ça assez contreintuitif parce qu'on se dit que l'intelligence artificielle c'est précisément une manière de dépasser les seules ressources physiques. Et pourtant vous dites pas du tout. Miser tout miser sur l'intelligence artificielle c'est une erreur. Non Dépasser les sur l'intelligence artificielle c'est une erreur. Non non. Dépasser les ressources physiques, c'est par définition impossible. Euh donc l'intelligence artificielle, elle permettra pas de violer les lois de la physique jamais. Euh c'est alors moi ce que je dis c'est que c'est une mauvaise allocation des priorités. Aujourd'hui, on a des problèmes par exemple qui est euh qui sont d'adapter l'agriculture au changement climatique. Ça, c'est un problème important. Je pense pas que l'intelligence artificielle va faire grand-chose là-dedans. On a le problème dont on vient de parler de d'assurer que des gens qui n'ont pas énormément de moyens continuent à avoir la possibilité de se déplacer. Je pense pas que l'intelligence artificielle va changer grand-chose à ce problème. On a une affaire de relocalisation de production industrielle essentielle en France. Est-ce que l'intelligence artificielle va nous permettre de mieux faire des batteries dans ce pays? Je suis pas sûr. Euh, on a un sujet sur la performance thermique des bâtiments, par exemple, pour un élément de souveraineté pour nous, c'est de moins consommer de fiou et de gaz dans le chauffage des bâtiments. C'est vraiment un élément de souveraineté puisqu'on apporte tout. Est-ce que l'intelligence artificielle va nous permettre de mieux faire ça? Je suis pas sûr. On a une forêt qui commence à être attaquée de plus en plus par le réchauffement climatique qui couvre quand même un/art de la superficie de ce pays. En fait, on se fait plaisir avec l'intelligence artificielle. C'est quoi? C'est un truc de riche. Moi ce que je dis souvent c'est que c'est un truc qui fascine les urbains, qui s'imagine que ils vont pouvoir rester dans un monde d'un mode de vie urbain confortable dans un monde dans lequel un certain nombre d'éléments physiques ou biologiques justement partent à volot. Euh et que l'intelligence artificielle, ça va permettre de résoudre des problèmes qui en fait sont des problèmes. Oui. Alors je dis parfois de manière provoquante de riche. Euh quand vous regardez qui sont les gens qui sont très moteurs derrière l'intelligence artificielle, c'est essentiellement des gens américains avec une totalement euh un péché d'orgueil. essentiellement des gens américains avec une totalement euh un péché d'orgueil. Oui, quelques c'est c'est on n'est pas très loin de ça. Euh alors, je dis pas que derrière il va pas y avoir des applications pertinentes dans l'eau. Euh mais même quand vous regardez par exemple quand on regarde les bénéfices pour la santé, en fait les bénéfices pour la santé d'une consommation plus modérée de sucre, de graisse et de plus d'exercices serait considérablement supérieur à ce qu'on peut attendre de l'intelligence artificielle et plutôt ailleurs un truc qui mettrait plutôt les gens de meilleure humeur. Vous avez vu Jean-Marc Jeankov ici que l'ONG écologiste Greenpeace a enlevé Emmanuel Macron, a enlevé la statue de cire d'Emmanuel Macron du du musée Grévin pour faire ensuite un apening devant le devant l'ambassade de de Russie. Est-ce que vous estimez que ce genre de mode d'action écolo aujourd'hui sont encore utiles? C'est J'ai envie de dire avec d'action écolo aujourd'hui sont encore utiles? C'est J'ai envie de dire avec tout le respect que je dois à tous ces braves gens que c'est anecdotique tout ça. Euh ce qui compte c'est beaucoup plus le travail de fond. Euh parce que c'est pas le fait d'enlever une statue de cire qui va résoudre les problèmes que je viens d'évoquer juste avant. Euh si on veut savoir par exemple quoi faire pour assurer la mobilité des gens qui ont pas beaucoup d'argent dans un monde sans pétrole, euh c'est pas en enlevant une statue de circ. Euh pour ça, il faut travailler, il faut regarder quelles sont les possibilités de s'organiser et cetera. Donc euh j'estime sans vouloir opposer les associations que ce qu'on essaie de faire au Chief Project en réfléchissant sur des projets un peu de fond et de voir comment on arriverait à s'organiser et à planifier la sortie des énergies fossiles, c'est un travail qui est plus qui ce qui sera plus utile à la collectivité. Il y a une autre question est plus qui ce qui sera plus utile à la collectivité. Il y a une autre question d'ailleurs écologiste qui est à la fois la question de prendre l'avion, la question de la consommation de viande et parfois aussi le fait d'avoir des enfants ou de ne pas avoir d'enfants. Est-ce que vous faites partie de ceux qui est qu'il ne faut pas avoir trop d'enfants? Si je vous dis ça, vous pour moi, c'est trop tard, j'en ai déjà quatre. Mais euh Non, je suis alors je me mets pas tellement sur ce terrain là euh pour plusieurs raisons. Euh la première, c'est que je considère que ça vous peur de moi. Oui, très d'accord. Vous êtes excellent en jitu que vous avez pas peur d'affronter Teddyariner dans pas longtemps mais euh donc non, c'est pas du tout à cause de ça. C'est parce que je pense que là, on est sur le terrain des valeurs morales et de l'éthique et que j'ai rien à dire là-dessus. Euh on est on n'est pas voilà si je me place d'un strict point de vue environnemental euh d'abord de toute façon le fait est qu'aujourd'hui les gens font de moins en moins d'enfants. Donc j'ai envie de dire si je considère que là en en en Occident euh Oui mais c'est en France, en Espagne, en Allemagne quoi. Oui en Chine aussi euh même enfin il y a plein de pays dans lequels la la démographie diminue. Et donc le sujet et par ailleurs quand on regarde les échelles de temps, c'est-à-dire il nous reste 20 30 ans pour régler un certain nombre de grands problèmes. Le fait queon doiv les régler à 7 à 8 ou à 9 milliards d'individus sur terre va pas beaucoup changer les choses. Donc c'est pas une priorité. choses. Donc vous vous en sortez bien. Donc j'ai envie de dire un de toute façon quand bien même je dirais moins on est nombreux plus le gâteau est facile à partager. De toute façon l'évolution est en cours enfin dans les pays occidentaux. Euh et de euh la révolution qu'il faut faire dans les quelques décennies qui viennent dépasse de toute façon cette questionlà. Merci beaucoup décennies qui viennent dépasse de toute façon cette questionlà. Merci beaucoup Jean-Marc Jeancovic si je vous sentais très prudent sur cette sur cette question mais au fond je me dis vous avez souvent dit combien de vols d'avion quoi manger autant vous voyez le avez souvent dit combien de vols d'avion quoi manger autant vous voyez le le le calcul que j'ai fait en disant si on veut que si on veut que l'aviation prenne sa part c'est un calcul que j'ai fait c'est pas une proposition j'ai fait si on veut que l'aviation prenne sa part à la lutte contre le changement climatique d'ici quelques décennies ça nous amène à 4 vols dans une vie qu'on soit 7 8 ou 9 milliards sur terre c'est c'est le même ordre de grandeur d'accord ça changera pas énormément merci c'est le même ordre de grandeur d'accord ça changera pas énormément merci beaucoup Jeanmarc Jeancomici d'avoir On répondu à mes questions ce matin.",
+  "utterances": [
+    {
+      "speaker": "SPEAKER_00",
+      "start": 0.031,
+      "end": 48.31,
+      "text": "Il est 8h32, vous êtes bien sur RMC et BFM TV. Bonjour Jean-Marc Jeanchud ici. Bonjour. Merci d'être avec moi ce matin. Ça fait un petit bout de temps qu'on vous entendait moins et puis vous revenez. Euh certains vous prêtent même des ambitions présidentielles. Alors soit pour vous soit pour d'autres à qui euh vous donneriez le bon logiciel. Jean-Marc Jeancovici, vous êtes un ingénieur spécialisé dans l'énergie, le climat, vous êtes consultant, conférencier et vous êtes à la tête du Shift Project. Il y a la fast fashion, il y a la fin des il y a peut-être la fin du tout électrique. En tout cas, c'est ce que nous disent les fabricants d'automobiles. Il y a la fin de de l'ambition d'une industrie verte ou en tout cas un changement de stratégie dans la plupart des très grosses entreprises. Il y a le retour des néonicotinoïdes, il y a la fronde des entreprises contre les normes écolo. Est-ce que finalement l'écologie c'est pas en train de passer de mode? Il"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 48.985,
+      "end": 83.157,
+      "text": "Il vaudrait mieux pas. Ça dépend de quoi on parle. Si on parle des problèmes à résoudre, il passe malheureusement pas du tout de mode euh puisque pas plus tard que il y a quelques minutes sur cette antenne, vous avez parlé d'une averse de grê qui enfin actuellement d'un épisode de Grê qui avait fait des gros dégâts. Euh bah par exemple alors en France l'étude scientifique n'a pas été faite mais aux États-Unis on a montré que le réchauffement climatique augmentait la taille des grélons. Euh oui donc ça passe pas du tout de mode. Euh ce qui peut éventuellement passer de mode, c'est l'attention qu'on y accorde. Euh mais ça c'est comme je sais pas si quelqu'un qui a un problème de temps en temps, il pense un peu moins. Ça veut pas dire que le problème n'existe plus."
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 86.127,
+      "end": 149.037,
+      "text": "Donc le problème est là, les solutions simplement un peu moins les limites planétaires sont bien là et elles se renforcent chaque jour. Euh ce qui peut éventuellement en ce moment être ressenti, enfin moi je je le décris comme ça, c'est une forme de confusion. Euh c'est-à-dire que on a cet éternel débat fin du monde, fin du mois avec des difficultés à faire se rejoindre la préoccupation environnementale et la préoccupation sociale par exemple, ce qu'on a vu dans les fe, la préoccupation économique et la préoccupation environnementale aussi. Alors, sur les normes pour les entreprises par exemple, c'est ce qui est mis en avant. Ne mettez pas de normes parce que ça nous empêche de faire des affaires. Euh moi je ne pense pas que les normes environnementales empêchent les clients de venir, voyez, par exemple. Donc c'est pas parce que on va demander aux entreprises de faire un rapport en moins que les clients vont se précipiter. C'est je pense que c'est deux problèmes totalement disjoins. Euh donc les ce qui ce qui se passe en ce moment, c'est que on est en train de rentrer un peu plus dans le dur. Euh mais moi ça m'étonne pas du tout euh parce que c'est ce qui doit normalement se passer quand on s'occupe pas des problèmes et une fois qu'on est un peu plus dans le dur bah on a tendance à se dire euh ah bah justement ce qui cause les problèmes, on va quand même moins s'en occuper parce que on a la tête ailleurs. Mais c'est forme d'illusion d'optique. Une illusion"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 149.037,
+      "end": 190.803,
+      "text": "que on a la tête ailleurs. Une illusion d'optique. Mais je vais quand même rentrer dans je vais rentrer dans le dur en effet et rattraper par la patrouille comme vous dites. Vous vous plaidez par exemple pour le durable, vous plaidez pour une consommation durable, pour le fait par exemple de prendre moins l'avion, vous avez même avancé le chiffre éventuellement de 4 vols par vie et par habitant. Et dans le même temps, la Fast Fashion qui est aujourd'hui à la une de l'actualité puisque les sénateurs vont peut-être adopter une loi contre Chine et Temu notamment, euh la fast fashion, c'est que les consommateurs français malgré tout à un moment, ils préfèrent acheter un t-shirt à 5 € qui certes lui aura pris l'avion. Donc certes eux peut-être moins, mais le t-shirt lui il aura pris l'avion. Bah toute la difficulté de"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 190.803,
+      "end": 219.406,
+      "text": "moins, mais le t-shirt lui il aura pris l'avion. Bah toute la difficulté de cette affaire c'est de faire se rejoindre l'environnement et l'économie. C'est-à-dire que à un moment, si on veut avoir des gestes qui sont entre guillemets vertueux pour l'environnement, al il faut bien comprendre que vertueux pour l'environnement infiné, c'est vertu pour nous-même. Sans environnement, vous et moi, on mange pas, vous et moi, on n pas d'activité. Enfin, je veux dire, l'environnement, c'est notre planète. Il y en a pas d'autres habitables dans le système solaire. Il y en a pas d'autres habitables nulle part. Et de toute façon, même s'il y en avait une habitable ailleurs, on déménage pas, on déménagerait pas l'humanité"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 224.603,
+      "end": 258.505,
+      "text": "maison commune. Donc, c'est le fameux Il n'y a pas de planète B. Oui, et c'est surtout notre maison commune. Je veux dire, si on est là aujourd'hui dans ce studio, c'est parce que on a un environnement qui nous a été favorable, bourré de ressources naturelles, qui nous permet simplement de respirer, de manger, de et cetera. Il faut bien comprendre que sans environnement, on handicape très fortement toutes nos autres activités. Enfin, sans environnement en bon état, j'ai envie de dire. C'est ça qui nous a fait. Euh donc l'idée queon puisse séparer les deux et queon puisse mener nos activités ordinaires, j'ai envie de dire produire, acheter et cetera dans un monde dans lequel on s'occupe pas d'environnement, c'est une illusion d'optique. Mais ça"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 258.505,
+      "end": 276.224,
+      "text": "lequel on s'occupe pas d'environnement, c'est une illusion d'optique. Mais ça veut dire qu'on fait quoi? Typiquement là, vous seriez sénateur, vous interdiriez alors il s'apprêtent peut-être à interdire les publicités sur la fast fashion comme on dit, voir même peut-être à taxer, rajouter 10 € peut-être par colis qui viendrait de Chinou de de Temu. Est-ce qu'il faut carrément interdire parce que ce qui ce"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 276.224,
+      "end": 294.247,
+      "text": "Chinou de Temu. Est-ce qu'il faut carrément interdire parce que ce qui ce qui lu cette histoire, c'est qu'aujourd'hui on a beaucoup de mal à comment dire orienter les activités économiques en fonction de leur pression sur l'environnement. C'est-à-dire comme l'environnement vaut rien par convention hein dans dans les activités économiques. Quand vous achetez quelque chose en fait ce que vous payez ça n'est que des revenus humains. D'accord? Le"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 294.972,
+      "end": 319.829,
+      "text": "chose en fait ce que vous payez ça n'est que des revenus humains. D'accord? Le prix de ce pull, ça n'est que des gens qui ont travaillé pour construire l'usine, pour faire pousser, enfin pour élever les moutons, pour et cetera, mais ça n'est absolument pas la nature. À aucun moment, on la paye. Donc aujourd'hui, on a réussi, on réussit pas à faire se rejoindre la question économique et la question environnementale. Ce qu'il faudrait faire effectivement pour pas que la phase fashion déferle sur nous, c'est tout simplement que les vêtements coûtent plus cher. Donc c'est une"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 320.47,
+      "end": 331.979,
+      "text": "tout simplement que les vêtements coûtent plus cher. Donc c'est une question de prix. Oui. Enfin, à un moment, c'est une question soit de prix, soit de réglementation. Mais la réglementation reviendrait à dire tel ou tel type de procédé de fabrication ou tel ou tel type de et cetera, c'est interdit. Et Jean-Marc Jeancovici, le"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 334.713,
+      "end": 338.155,
+      "text": "recyclage est-ce que le est-ce que recycler ces produits ça ça pourrait être Alors recycler ça évite pas les émissions de fabrication euh quand vous"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 338.611,
+      "end": 369.104,
+      "text": "être Alors, recycler, ça évite pas les émissions de fabrication euh quand vous fabriquez un vêtement à partir de recycler, euh quand vous y arrivez parce que tout ce qui est composite par exemple, vous savez tous les vêtements sur lesquels il y a marqué x % coton, x % polyester ou et cetera, en fait c'est très difficile à recycler parce qu'il faudrait séparer les matériaux qui sont dans votre vêtement et ça c'est quasiment infaisable. Donc déjà tout ce qui est hybride vous recyclez pas et pour les matériaux qui sont purs, le recyclage c'est pas toujours très facile à faire. Euh et surtout les vêtements qui sont fabriqués à l'étranger, ils seront jamais fabriqués avec des fibres qui vont être recyclées en France. Donc"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 371.315,
+      "end": 377.339,
+      "text": "qui vont être recyclées en France. Donc on fait quoi? On augmente le prix. Donc si on veut bah il faut qu'on arrive à se dire collectivement que c'est pas très grave si on a une garde-robe un peu moins garnie. C'est ça à la base. C'est"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 378.79,
+      "end": 385.912,
+      "text": "grave si on a une garde-robe un peu moins garnie. C'est ça. Au fond au fond pour vous quand vous dites quatre vols par exemple dans une vie combien de t-shirts, combien de pulls? en"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 390.788,
+      "end": 392.392,
+      "text": "arri euh bah il fut d'une époque où on en avait beaucoup moins. Euh je veux dire qu je dans une vie je veux dire je"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 391.902,
+      "end": 402.432,
+      "text": "en avait beaucoup moins. Euh je veux dire qu je dans une vie je veux dire je veux dire moi il y a un exemple que je prends souvent c'est que mon père qui était prof de fac donc pas vraiment un pauvre euh et ben je me rappelle très bien que quand j'étais enfant il avait des vestes qui étaient rapié au coude."
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 402.787,
+      "end": 408.659,
+      "text": "bien que quand j'étais enfant il avait des vestes qui étaient rapié au coude. Donc mon père qui était prof de fac supérieur à l'époque où j'étais enfant on jetait pas un vêtement qui avait un trou au coude. Donc c'est même pas une"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 411.967,
+      "end": 421.028,
+      "text": "trou au coude. Donc c'est même pas une question d'argent c'est une question de consommation de mode de consommation. C'était bah l'un va avec l'autre. Euh il faut bien voir que le prix réel d'un vêtement aujourd'hui, il doit être 50 à 100 fois inférieur à ce qu'il était il y a un siècle. La fin des ADFE Jean-Marc"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 412.979,
+      "end": 432.622,
+      "text": "question d'argent c'est une question de consommation de mode de consommation. La fin des ADFE Jean-Marc Jeancovici, la fin des EDFE, est-ce que c'est un drame absolu ou est-ce que c'est une réponse au fait que un certain nombre de Français se sentaient exclus?"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 432.622,
+      "end": 446.307,
+      "text": "c'est une réponse au fait que un certain nombre de Français se sentaient exclus? Alors, c'est un coup de balancier excessif dans l'autre sens. après un coup de balancier euh enfin je veux dire on a commencé par dire on va régler le problème de la pollution locale en interdisant l'accès. Il y avait d'autres moyens de régler ou plus exactement"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 446.273,
+      "end": 452.517,
+      "text": "interdisant l'accès. Il y avait d'autres moyens de de régler ou plus exactement l'excès l'excès de zel écolo a entraîné un rejet. C'est ça ce que vous êtes en train de dire. Souvent la politique"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 452.18,
+      "end": 462.862,
+      "text": "un rejet. Souvent la politique publique c'est des balanciers. Vous savez ça va d'un côté puis ça revient de l'autre puis cetera. Euh donc là, on s'est dit, on va traiter le problème de la pollution locale en interdisant l'accès aux véhicules les plus polluants. Est-ce que"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 463.638,
+      "end": 470.776,
+      "text": "l'accès aux véhicules les plus polluants. Est-ce que Est-ce que aujourd'hui vous estimez donc que il fallait ni interdire avant ni supprimer totalement les ZFE aujourd'hui? Alors,"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 470.776,
+      "end": 482.47,
+      "text": "fallait ni interdire avant ni supprimer totalement les ZFE aujourd'hui? Alors, je vais pas regarder le dossier des ZFE en détail parce que c'est pas vraiment un problème de climat. Les ZFE, c'est un problème de pollution locale. D'accord? C'est un peu différent. Euh on n' pas fait ça pour limiter les émissions de CO2, on a fait ça pour limiter la pollution locale. Alors, il y a"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 483.044,
+      "end": 501.337,
+      "text": "CO2, on a fait ça pour limiter la pollution locale. Alors, il y a plusieurs manières de s'y prendre si on veut limiter la pollution locale. On peut interdire la vente des véhicules les plus polluants et puis attendre que ils sortent du parc. Euh on peut interdire leur circulation. Euh on peut euh renforcer l'incitation à renflacer son véhicule pour les gens qui en possèdent. Enfin voilà, il y a on peut faire on a sué pratiquement tout ça."
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 500.257,
+      "end": 514.381,
+      "text": "son véhicule pour les gens qui en possèdent. C'est-à-dire que parallèlement à ce que devaient être les ZFE, les dernières les derniers budget ont quasiment supprimé les aides à l'achat par exemple d'une d'une voiture écolo. Le bonus écolo est devenu beaucoup moins incitatif. Alors"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 514.448,
+      "end": 531.796,
+      "text": "d'une voiture écolo. Alors sur le bonus euh sur le bonus et le malus, moi je pense queon a fait une erreur il y a très longtemps euh qui était d'avoir supprimé l'impôt à la détention d'un véhicule qui était la vignette. Il y avait un impôt qui était extrêmement écolo, qui était la vignette. Et en fait, on payait d'autant plus queon avait une voiture qui consommait beaucoup. On aurait très bien"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 532.977,
+      "end": 545.296,
+      "text": "plus queon avait une voiture qui consommait beaucoup. On aurait très bien pu euh conserver ce système-là et à ce moment, ça aurait sur la durée dissuader les gens euh de détenir une voiture qui n'avait pas les bonnes caractéristiques. Euh de toute façon, ces choses-là doivent toujours être faites de manière progressive. Donc aujourd'hui, est-ce"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 545.667,
+      "end": 552.417,
+      "text": "doivent toujours être faites de manière progressive. Donc aujourd'hui, est-ce que vous vous désolez, j'ai pas très bien compris si vous vous désolez de la fin des EDFE ou si vous vous dites de toute façon c'était pas forcément la bonne manière? Alors je ne suis ni l'un"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 557.564,
+      "end": 563.555,
+      "text": "vraiment regardé. Vous estimez que c'est trop local. Je je j'ai pas vraiment regardé. Ce qui est sûr euh c'est que l'idée de baisser la pollution automobile est une bonne idée. Euh mais"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 564.179,
+      "end": 574.591,
+      "text": "l'idée de baisser la pollution automobile est une bonne idée. Euh mais il y a plein de moyens enfin comment dire il y a plein de moyens euh d'y arriver. Euh par exemple quand vous construisez des pistes cyclables et que une fraction croissante des gens se mettent au vélo, euh vous diminuez la"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 578.084,
+      "end": 616.694,
+      "text": "mettent au vélo, euh vous diminuez la pollution. De fait euh vous pouvez avoir une mesure qui n'est pas une mesure tout ou rien. Je veux dire la ZFE c'est tout. c'est vous interdisez toute la zone, vous pouvez interdire progressivement des axes à la circulation. Alors ça fait gueuler les gens effectivement, mais c'est moins du tout ou rien. Euh et de toute façon, il faut toujours des alternatives. Donc en fait la question c'est à partir du moment où on interdit la circulation à un certaines catégories de véhicules, c'est quelle alternative on propose à ces gens-là? Alors est-ce qu'on leur dit \"Vous avez qu'à changer de véhicule mais à ce moment on sait très bien qu'il y a une partie des gens pour lesquels c'est difficile ou est-ce qu'on leur dit autre chose? Et encore une fois, c'est un dossier local. Donc moi, j'ai pas regardé ça de près. Tout ce que je sais, c'est que dans tous les cas de figure, il faut des alternatives. Est-ce qu'il faudra sortir de la voiture"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 616.508,
+      "end": 625.452,
+      "text": "Est-ce qu'il faudra sortir de la voiture quand on voit de toute façon que la vente des véhicules neufs est en chute libre? Ça c'est juste une question de temps, vous savez. C'est une question de temps, mais pour vous, on y rien. Je"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 625.165,
+      "end": 644.032,
+      "text": "temps, vous savez. Je veux dire, je sais pas si ça va prendre 50 ans de siècle ou et cetera, mais c'est une question de temps. Euh alors, pourquoi est-ce que je dis c'est une question de temps? Ou plus exactement, c'est une question de temps avec 1 milliard et demi de voitures sur terre et 40 millions de voitures en France. D'accord. Euh ça c'est une question de temps parce que euh c'est très difficile de conserver des véhicules d'une tonne et demi par personne euh avec une"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 644.757,
+      "end": 655.152,
+      "text": "de conserver des véhicules d'une tonne et demi par personne euh avec une énergie pas cher dans un monde dans lequel il y aura plus de pétrole et plus de gaz et plus de charbon. D'accord? Ça ça va être très difficile de toute façon. Donc de toute façon, on va vers un monde avec moins de voiture. Ça c'est"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 655.456,
+      "end": 667.707,
+      "text": "façon. Ça c'est absolument certain. Et c'est là que je disais de temps en temps, enfin c'est là que je disais pardon, on va être rattrapé par la patrouille si on ne le fait pas délibérément. Il faut savoir qu'en Europe, l'approvisionnement pétrolier est déjà contraint à la baisse depuis 15 ans déjà. Et ce qui est en"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 673.934,
+      "end": 678.963,
+      "text": "marché automobile en Europe, moi me surprend qu'à moitié. C'est-à-dire la la chute vertigineuse des ventes d'automobiles pour vous, ça n'est que logique. C'est pas étonnant compte tenu"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 682.608,
+      "end": 686.607,
+      "text": "logique. C'est pas étonnant compte tenu de l'évolution de fond qui est celle-l faut arrêter de se battre, il faut arrêter de se battre. Il faut"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 685.443,
+      "end": 694.403,
+      "text": "faut arrêter de se battre, il faut arrêter arrêter de se battre. Il faut arrêter de se Il faut jamais arrêter de arrêter de se Il faut jamais arrêter de se battre. Par contre, il faut pas se battre pour des illusions. C'est-à-dire que il faut pas courir derrière des objectifs qui sont physiquement pas atteignables. C'est-à-dire euh voilà euh"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 699.803,
+      "end": 705.136,
+      "text": "coûte une industrie automobile qui de toute façon est voit. Non, ça c'est quelque chose qu'on pourrait faire aussi euh mais on le fera pas avec les règles du jeu actuell. Euh c'est quelle règle"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 706.267,
+      "end": 735.511,
+      "text": "du jeu actuell. Euh c'est quelle règle du jeu qu'il faut? Des il faut refaire du protectionnisme intelligent. Si on veut avoir de l'industrie automobile en Europe, étant donné et en particulier en France, étant donné que les coûts de production sont supérieurs parce que la main d'œuvre coûte plus cher, il faut après se protéger fatalement contre les importations qui coûtent moins cher. Euh si on veut fabriquer des voitures électriques en Europe, il faut d'abord commencer par se mettre au niveau technologique des Chinois qui ont pris beaucoup d'avance. Peut-être qu'il faut faire des transferts de technologie dans l'autre sens. C'est il faut dire à BID, OK, vous vendez en Europe à la condition que vous fassiez des transferts de techno. Parce que maintenant ça devrait aller dans l'autre sens. C'est-à-dire"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 740.607,
+      "end": 744.809,
+      "text": "auprès des Chinois. Il faut maintenant qu' qu'il fassent l'inverse. Bah ça pourrait être un truc à regarder puisque maintenant ils sont en avance sur nous. Ils font des voitures plus écolo, sauf"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 751.407,
+      "end": 753.01,
+      "text": "jamais en avion. Pas en avion d'habitude vient vient en bateau mais elles font des kilomètres quoi. Elles"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 753.888,
+      "end": 771.826,
+      "text": "d'habitude vient en bateau mais elles font des kilomètres quoi. Elles viennent en bateau. Oui. Non, c'est pas le transport de la voiture qui est le sujet. euh c'est plus la fabrication de la voiture parce que comme la batterie c'est très électrointensif pour fabriquer une batterie euh bah avec de l'électricité au charbon chinoise, même si elle est de moins en moins au charbon euh parce qu'ils font de plus en plus d'autres choses, euh les émissions de fabrication de la batterie sont bien supérieures à ce qu'elles serait si on la fabriquait en France. Jean-Marc"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 772.788,
+      "end": 789.68,
+      "text": "la fabriquait en France. Jean-Marc Jeancovici, ces pannes géantes qui ont eu lieu en Espagne, au Portugal, qui ont plongé le pays pendant plus de 24 heures, parfois dans le noir. Comment vous avez vécu ça vous qui qui dites qu'à un moment ou à un autre, on sera dans une finitude, dans une limite. Oui."
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 789.848,
+      "end": 827.868,
+      "text": "qu'à un moment ou à un autre, on sera dans une finitude, dans une limite. Oui. Alors, une finitude, ça veut pas dire qu'on a une panne électrique géante nécessairement. la finitude pour moi c'est plutôt qu'il faut s'habituer à consommer moins. Euh on n' pas encore l'origine de la panne sauf de ma part euh sur ce qui s'est passé en Espagne. Euh par contre ce que ça démontre de manière il y a il y a deux choses deux enseignements qu'on peut en tirer. Le premier c'est que ça montre l'extrême dépendance de notre monde moderne à l'électricité. Mais ça c'est quelque chose qu'on savait déjà. Mais ça ça le mérite de nous le rappeler. On est aujourd'hui dans un monde dans lequel sans électricité vous payez plus. Euh vous avez plus de système de transport, vous n'avez plus enfin vous il se passe tout tout est bloqué quoi. D'accord. L'économie s'arrête et une bonne partie de la vie s'arrête également. Alors"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 828.273,
+      "end": 842.161,
+      "text": "Alors quand quand ça ne dure que 24 heures c'est pas très grave. Si ça devait durer beaucoup plus longtemps, ça serait beaucoup plus ennuyeux. La deuxième chose intéressante à savoir c'est que le réseau n'a redémarré que parce qu'il y avait des moyens pilotables disponibles. Donc des centrales à gaz et des centrales hydroélectriques."
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 844.726,
+      "end": 845.435,
+      "text": "Donc il a fallu faire appel à des vieilles technologies vieilles des"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 845.435,
+      "end": 856.235,
+      "text": "Donc il a fallu faire appel à des vieilles technologies vieilles des technologies pilotables euh voilà. Donc ce que ça montre c'est queon n'est pas sûr de pouvoir redémarrer un réseau avec pas des des technologies pas pil enfin des modes de production pas pilotables. Voilà, c'est ça c'est un autre enseignement. Quand vous dites et quand"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 855.897,
+      "end": 864.824,
+      "text": "Quand vous dites et quand vous dites \"On ne sait toujours pas effectivement euh euh l'origine de la panne, ça vous paraît normal ça qu'on ne puisse pas qu'on puisse avoir une panne de cette ampleur et sans savoir d'où"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 866.427,
+      "end": 874.038,
+      "text": "de cette ampleur et sans savoir d'où elle vient? Je suis pas je suis pas suffisamment spécialiste des réseaux électriques pour vous dire oui ou non. Donc je je fais comme tout le monde, j'attends. Je pense qu'on finira par savoir un jour. Mais c'est assez"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 877.278,
+      "end": 887.538,
+      "text": "surprenant tout de même cette ampleur là. Bon bah, vous savez des réseaux qui se cassent la figure. Non, ça arrive de temps en temps. Il y a eu une très grosse panne au Texas, rappelez-vous, à cause d'une tempête de neige il y a il y a pas très longtemps, il y a un ou 2 ans. 2 ans. Donc de temps en temps, ça"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 888.095,
+      "end": 896.819,
+      "text": "a pas très longtemps, il y a un ou 2 ans. Donc de temps en temps, ça ans. 2 ans. Donc de temps en temps, ça arrive ce genre de choses. Il faut espérer que ça arrive pas très souvent et là il faut comprendre pourquoi c'est arrivé avant d'en tirer des conclusions."
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 896.819,
+      "end": 917.997,
+      "text": "et là il faut comprendre pourquoi c'est arrivé avant d'en tirer des conclusions. Jean-Marc Jeankovici, vous avez parlé d'un problème d'allocation des ressources, le fait qu'on mette tant d'argent par exemple dans l'intelligence artificielle. Je trouve ça assez contreintuitif parce qu'on se dit que l'intelligence artificielle c'est précisément une manière de dépasser les seules ressources physiques. Et pourtant vous dites pas du tout. Miser tout miser sur l'intelligence artificielle c'est une erreur. Non Dépasser les"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 917.997,
+      "end": 983.489,
+      "text": "sur l'intelligence artificielle c'est une erreur. Non non. Dépasser les ressources physiques, c'est par définition impossible. Euh donc l'intelligence artificielle, elle permettra pas de violer les lois de la physique jamais. Euh c'est alors moi ce que je dis c'est que c'est une mauvaise allocation des priorités. Aujourd'hui, on a des problèmes par exemple qui est euh qui sont d'adapter l'agriculture au changement climatique. Ça, c'est un problème important. Je pense pas que l'intelligence artificielle va faire grand-chose là-dedans. On a le problème dont on vient de parler de d'assurer que des gens qui n'ont pas énormément de moyens continuent à avoir la possibilité de se déplacer. Je pense pas que l'intelligence artificielle va changer grand-chose à ce problème. On a une affaire de relocalisation de production industrielle essentielle en France. Est-ce que l'intelligence artificielle va nous permettre de mieux faire des batteries dans ce pays? Je suis pas sûr. Euh, on a un sujet sur la performance thermique des bâtiments, par exemple, pour un élément de souveraineté pour nous, c'est de moins consommer de fiou et de gaz dans le chauffage des bâtiments. C'est vraiment un élément de souveraineté puisqu'on apporte tout. Est-ce que l'intelligence artificielle va nous permettre de mieux faire ça? Je suis pas sûr. On a une forêt qui commence à être attaquée de plus en plus par le réchauffement climatique qui couvre quand même un/art de la superficie de ce pays. En fait, on se fait plaisir avec l'intelligence"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 985.447,
+      "end": 1017.205,
+      "text": "artificielle. C'est quoi? C'est un truc de riche. Moi ce que je dis souvent c'est que c'est un truc qui fascine les urbains, qui s'imagine que ils vont pouvoir rester dans un monde d'un mode de vie urbain confortable dans un monde dans lequel un certain nombre d'éléments physiques ou biologiques justement partent à volot. Euh et que l'intelligence artificielle, ça va permettre de résoudre des problèmes qui en fait sont des problèmes. Oui. Alors je dis parfois de manière provoquante de riche. Euh quand vous regardez qui sont les gens qui sont très moteurs derrière l'intelligence artificielle, c'est essentiellement des gens américains avec une totalement euh un péché d'orgueil."
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 1017.965,
+      "end": 1037.27,
+      "text": "essentiellement des gens américains avec une totalement euh un péché d'orgueil. Oui, quelques c'est c'est on n'est pas très loin de ça. Euh alors, je dis pas que derrière il va pas y avoir des applications pertinentes dans l'eau. Euh mais même quand vous regardez par exemple quand on regarde les bénéfices pour la santé, en fait les bénéfices pour la santé d'une consommation plus modérée de sucre, de graisse et de plus d'exercices serait considérablement supérieur à ce qu'on peut attendre de l'intelligence artificielle et plutôt"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 1042.923,
+      "end": 1063.358,
+      "text": "ailleurs un truc qui mettrait plutôt les gens de meilleure humeur. Vous avez vu Jean-Marc Jeankov ici que l'ONG écologiste Greenpeace a enlevé Emmanuel Macron, a enlevé la statue de cire d'Emmanuel Macron du du musée Grévin pour faire ensuite un apening devant le devant l'ambassade de de Russie. Est-ce que vous estimez que ce genre de mode d'action écolo aujourd'hui sont encore utiles? C'est J'ai envie de dire avec"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 1063.882,
+      "end": 1107.385,
+      "text": "d'action écolo aujourd'hui sont encore utiles? C'est J'ai envie de dire avec tout le respect que je dois à tous ces braves gens que c'est anecdotique tout ça. Euh ce qui compte c'est beaucoup plus le travail de fond. Euh parce que c'est pas le fait d'enlever une statue de cire qui va résoudre les problèmes que je viens d'évoquer juste avant. Euh si on veut savoir par exemple quoi faire pour assurer la mobilité des gens qui ont pas beaucoup d'argent dans un monde sans pétrole, euh c'est pas en enlevant une statue de circ. Euh pour ça, il faut travailler, il faut regarder quelles sont les possibilités de s'organiser et cetera. Donc euh j'estime sans vouloir opposer les associations que ce qu'on essaie de faire au Chief Project en réfléchissant sur des projets un peu de fond et de voir comment on arriverait à s'organiser et à planifier la sortie des énergies fossiles, c'est un travail qui est plus qui ce qui sera plus utile à la collectivité. Il y a une autre question"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 1107.385,
+      "end": 1118.877,
+      "text": "est plus qui ce qui sera plus utile à la collectivité. Il y a une autre question d'ailleurs écologiste qui est à la fois la question de prendre l'avion, la question de la consommation de viande et parfois aussi le fait d'avoir des enfants ou de ne pas avoir d'enfants. Est-ce que vous faites partie de ceux qui est qu'il ne faut pas avoir trop d'enfants? Si je vous dis ça, vous"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 1125.121,
+      "end": 1132.715,
+      "text": "pour moi, c'est trop tard, j'en ai déjà quatre. Mais euh Non, je suis alors je me mets pas tellement sur ce terrain là euh pour plusieurs raisons. Euh la première, c'est que je considère que ça vous peur de moi. Oui, très d'accord."
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 1138.975,
+      "end": 1156.863,
+      "text": "Vous êtes excellent en jitu que vous avez pas peur d'affronter Teddyariner dans pas longtemps mais euh donc non, c'est pas du tout à cause de ça. C'est parce que je pense que là, on est sur le terrain des valeurs morales et de l'éthique et que j'ai rien à dire là-dessus. Euh on est on n'est pas voilà si je me place d'un strict point de vue environnemental euh d'abord de toute façon le fait est qu'aujourd'hui les gens font de moins en moins d'enfants."
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 1162.128,
+      "end": 1164.457,
+      "text": "Donc j'ai envie de dire si je considère que là en en en Occident euh Oui mais c'est en France, en Espagne, en Allemagne quoi. Oui en Chine aussi euh"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 1170.582,
+      "end": 1184.74,
+      "text": "même enfin il y a plein de pays dans lequels la la démographie diminue. Et donc le sujet et par ailleurs quand on regarde les échelles de temps, c'est-à-dire il nous reste 20 30 ans pour régler un certain nombre de grands problèmes. Le fait queon doiv les régler à 7 à 8 ou à 9 milliards d'individus sur terre va pas beaucoup changer les choses. Donc c'est pas une priorité."
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 1187.153,
+      "end": 1206.61,
+      "text": "choses. Donc vous vous en sortez bien. Donc j'ai envie de dire un de toute façon quand bien même je dirais moins on est nombreux plus le gâteau est facile à partager. De toute façon l'évolution est en cours enfin dans les pays occidentaux. Euh et de euh la révolution qu'il faut faire dans les quelques décennies qui viennent dépasse de toute façon cette questionlà. Merci beaucoup"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 1206.948,
+      "end": 1217.41,
+      "text": "décennies qui viennent dépasse de toute façon cette questionlà. Merci beaucoup Jean-Marc Jeancovic si je vous sentais très prudent sur cette sur cette question mais au fond je me dis vous avez souvent dit combien de vols d'avion quoi manger autant vous voyez le"
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 1216.094,
+      "end": 1235.028,
+      "text": "avez souvent dit combien de vols d'avion quoi manger autant vous voyez le le le calcul que j'ai fait en disant si on veut que si on veut que l'aviation prenne sa part c'est un calcul que j'ai fait c'est pas une proposition j'ai fait si on veut que l'aviation prenne sa part à la lutte contre le changement climatique d'ici quelques décennies ça nous amène à 4 vols dans une vie qu'on soit 7 8 ou 9 milliards sur terre c'est c'est le même ordre de grandeur d'accord ça changera pas énormément merci"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 1235.028,
+      "end": 1241.153,
+      "text": "c'est le même ordre de grandeur d'accord ça changera pas énormément merci beaucoup Jeanmarc Jeancomici d'avoir On répondu à mes questions ce matin."
+    }
+  ]
+}
