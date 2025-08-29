@@ -62,29 +62,37 @@ print("JSONS     → /content/work/outputs/json (persiste dans Drive)")
 
 ## 2) Synchroniser le code GitHub
 
-```python
 # === Cellule 2 — Synchroniser votre code depuis GitHub (clone/pull) ===
-import subprocess, pathlib
+import subprocess, pathlib, shutil, os, sys
+
+# Utilise les variables de la Cellule 1 si elles existent, sinon valeurs par défaut
+REPO_URL = globals().get("REPO_URL", "https://github.com/anthonyboisbouvier-paris/mon_projet_politique.git")
+BRANCH   = globals().get("BRANCH", "main")
 
 repo_dir = pathlib.Path("/content/work/repo")
-if repo_dir.exists() and (repo_dir / ".git").exists():
-    print("🔄 Mise à jour du dépôt…")
-    subprocess.run(["git", "-C", str(repo_dir), "fetch", "--depth=1", "origin", BRANCH], check=True)
-    subprocess.run(["git", "-C", str(repo_dir), "reset", "--hard", f"origin/{BRANCH}"], check=True)
-else:
+
+def reclone():
+    if repo_dir.exists():
+        shutil.rmtree(repo_dir, ignore_errors=True)
     print("⬇️ Clone du dépôt…")
     subprocess.run(["git", "clone", "--depth", "1", "-b", BRANCH, REPO_URL, str(repo_dir)], check=True)
 
-print("Contenu repo:")
+if repo_dir.exists() and (repo_dir / ".git").exists():
+    print("🔄 Mise à jour du dépôt…")
+    try:
+        subprocess.run(["git", "-C", str(repo_dir), "fetch", "--depth=1", "origin", BRANCH], check=True)
+        subprocess.run(["git", "-C", str(repo_dir), "reset", "--hard", f"origin/{BRANCH}"], check=True)
+    except subprocess.CalledProcessError as e:
+        print("⚠️  fetch/reset a échoué → on reclone proprement")
+        reclone()
+else:
+    reclone()
+
+print("\nContenu repo:")
 for p in sorted(repo_dir.iterdir()):
     print(" -", p.name)
-```
-> ℹ️ La cellule ci‑dessus effectue **`git fetch` + `reset --hard`** à chaque session : vous avez **toujours la dernière version GitHub**.
-
----
 
 ## 3) Installer les dépendances
-
 ```python
 # === Cellule 3 — Installer/mettre à jour les dépendances ===
 import subprocess, sys, pathlib
