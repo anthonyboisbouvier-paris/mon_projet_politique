@@ -50,63 +50,106 @@ def audio_duration_seconds(wav_path: str) -> float:
 
 # -------------------------- téléchargement YouTube ----------------------------
 
-def download_youtube(input_url: str, subs_lang: str, allow_auto: bool) -> Tuple[str, Optional[str], Path]:
-    """
-    - Télécharge l'audio (WAV)
-    - Télécharge les sous-titres .vtt si dispos (FR en priorité; auto si allow_auto)
-    Retourne (wav_16k_mono_path, vtt_path_or_None, workdir)
-    """
-    workdir = Path(tempfile.mkdtemp(prefix="yt_"))
-    base = workdir / "media"
+def download_youtube(input_url: str, subs_lang: str, allow_auto: bool):
+    # Télécharge l'audio + récupère les VTT via yt-dlp avec cookies + convertit en mono 16 kHz.
+    import uuid, os
+    from pathlib import Path
 
-    # AUDIO -> WAV
+    def _pick_cookies():
+        env = os.environ.get('COOKIES', '').strip()
+        candidates = []
+        if env:
+            candidates.append(Path(env))
+        candidates.append(Path('/content/drive/MyDrive/mon_projet_politique/cookies.txt'))
+        for c in candidates:
+            if c and c.exists():
+                return c
+        return None
+
+    print('[STEP] Téléchargement audio YouTube…')
+    workdir = Path(f"/tmp/yt_{uuid.uuid4().hex[:8]}")
+    workdir.mkdir(parents=True, exist_ok=True)
+
+    cookies_file = _pick_cookies()
+    if cookies_file is None:
+        print('[WARN] Aucun fichier cookies trouvé. Certains sous-titres peuvent manquer.')
+        cookie_args = []
+    else:
+        print(f'[CHECK] Cookies: {cookies_file}')
+        cookie_args = ['--cookies', str(cookies_file)]
+
+    # Audio → WAV
+    audio_out = workdir / 'media.%(ext)s'
     cmd_audio = [
-        "yt-dlp",
-        "-q",
-        "-x",
-        "--audio-format",
-        "wav",
-        "--audio-quality",
-        "0",
-        "-o",
-        f"{base}.%(ext)s",
-        input_url,
+        'yt-dlp','-q','-4', *cookie_args,
+        '-x','--audio-format','wav','--audio-quality','0',
+        '-o', str(audio_out), input_url
     ]
-    print("[STEP] Téléchargement audio YouTube…")
     sh(cmd_audio)
 
-    wav = next(workdir.glob("media.wav"), None)
-    if wav is None:
-        raise RuntimeError("Audio .wav introuvable après yt-dlp.")
+    wav_src = next(iter(workdir.glob('*.wav')), None)
+    if wav_src is None:
+        raise RuntimeError('Audio WAV introuvable après yt-dlp.')
 
-    # SOUS-TITRES -> .vtt
-    sub_args = [
-        "--write-subs",
-        "--sub-langs",
-        subs_lang,
-        "--sub-format",
-        "vtt",
-        "--skip-download",
-        "-o",
-        f"{base}.%(ext)s",
-    ]
-    if allow_auto:
-        sub_args.insert(0, "--write-auto-subs")
+    # Sous-titres
+    print('[STEP] Récupération des sous-titres .vtt (FR préférés)…')
+    vtt_path = None
+    clients = ['tvhtml5ios', 'ios', 'android', 'web']  # priorité à tvhtml5ios (ton test OK)
+    sub_flags = ['--write-subs', '--write-auto-sub'] if allow_auto else ['--write-subs']
 
-    print("[STEP] Récupération des sous-titres .vtt (FR préférés)…")
-    sh(["yt-dlp", "-q", *sub_args, input_url], allow_fail=True)
-    vtt = next(workdir.glob("media*.vtt"), None)
-    if vtt is None:
-        print("[WARN] Sous-titres .vtt introuvables.")
+    # ménage initial
+    for old in workdir.glob('*.vtt'):
+        try: old.unlink()
+        except: pass
 
-    # CONVERSION 16 kHz mono
-    wav_16k = workdir / "audio_16k_mono.wav"
-    print("[STEP] Conversion en WAV mono 16k…")
-    sh(["ffmpeg", "-y", "-i", str(wav), "-ac", "1", "-ar", "16000", str(wav_16k)])
-    print(f"[CHECK] Audio prêt: {wav_16k}")
-    return str(wav_16k), (str(vtt) if vtt else None), workdir
+    for cli in clients:
+        print(f'[INFO] Essai sous-titres avec client: {cli}')
+        # ménage avant essai
+        for old in list(workdir.glob('*.vtt')) + list(workdir.glob('*.srt')) + list(workdir.glob('*.srv*')):
+            try: old.unlink()
+            except: pass
 
-# ---------------------------- parsing des sous-titres --------------------------
+        cmd_vtt = [
+            'yt-dlp','-4', *cookie_args,
+            '--extractor-args', f'youtube:player_client={cli}',
+            '--skip-download', *sub_flags,
+            '--convert-subs','vtt',
+            '--sub-format','vtt/srt',
+            '--sub-langs', subs_lang,
+            '-o', str(workdir / '%(id)s.%(ext)s'),
+            input_url
+        ]
+        try:
+            sh(cmd_vtt)
+        except Exception as e:
+            print(f'[WARN] Essai client {cli} a levé une erreur (on continue): {e}')
+            continue
+
+        found = sorted(workdir.glob('*.vtt'))
+        print(f"[DEBUG] Fichiers .vtt trouvés ({cli}): {[f.name for f in found]}")
+        if found:
+            pref_order = ['fr', 'fr-FR', 'fr-CA']
+            chosen = None
+            for tag in pref_order:
+                for f in found:
+                    name = f.name.lower()
+                    if f'.{tag.lower()}.' in name or name.endswith(f'.{tag.lower()}.vtt'):
+                        chosen = f; break
+                if chosen: break
+            vtt_path = chosen or found[0]
+            break
+
+    if vtt_path is None:
+        print('[WARN] Sous-titres .vtt introuvables.')
+
+    # Conversion → mono 16 kHz
+    out_wav = workdir / 'audio_16k_mono.wav'
+    sh(['ffmpeg','-y','-i', str(wav_src), '-ac','1','-ar','16000', str(out_wav)])
+    print(f'[CHECK] Audio prêt: {out_wav}')
+
+    return str(out_wav), (str(vtt_path) if vtt_path else None), str(workdir)
+
+from dataclasses import dataclass
 
 @dataclass
 class Caption:
@@ -378,3 +421,86 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+def download_youtube(input_url: str, subs_lang: str, allow_auto: bool):
+    """Télécharge l'audio + récupère les VTT (fallback de clients yt-dlp) + convertit en mono 16 kHz.
+
+    Args:
+        input_url: URL YouTube
+        subs_lang: ex. "fr,fr-FR,fr-CA"
+        allow_auto: True pour autoriser les auto-captions
+    Returns:
+        (wav_path, vtt_path_or_None, workdir)
+    """
+    import uuid, os
+    from pathlib import Path
+
+    print("[STEP] Téléchargement audio YouTube…")
+    workdir = Path(f"/tmp/yt_{uuid.uuid4().hex[:8]}")
+    workdir.mkdir(parents=True, exist_ok=True)
+
+    cookies = Path("/content/drive/MyDrive/mon_projet_politique/cookies.txt")
+    cookie_args = ["--cookies", str(cookies)] if cookies.exists() else []
+
+    # 1) Audio → WAV
+    audio_out = workdir / "media.%(ext)s"
+    cmd_audio = ["yt-dlp","-q","-4",*cookie_args,
+                 "-x","--audio-format","wav","--audio-quality","0",
+                 "-o", str(audio_out), input_url]
+    sh(cmd_audio)
+
+    wav_path = next(iter(workdir.glob("*.wav")), None)
+    if wav_path is None:
+        raise RuntimeError("Audio WAV introuvable après yt-dlp.")
+
+    # 2) Sous-titres (fallback clients)
+    print("[STEP] Récupération des sous-titres .vtt (FR préférés)…")
+    vtt_path = None
+    clients = ["tvhtml5ios", "ios", "android", "web"]
+    sub_flags = (["--write-subs","--write-auto-sub"] if allow_auto else ["--write-subs"])
+
+    for cli in clients:
+        # Nettoyage .vtt précédents
+        for old in workdir.glob("*.vtt"):
+            try: old.unlink()
+            except: pass
+
+        # Tentative avec ce client
+        # NOTE: on évite les PO tokens → clients TV/IOS/Android passent souvent sans.
+        cmd_vtt = [
+            "yt-dlp","-4",*cookie_args,
+            "--extractor-args", f"youtube:player_client={cli}",
+            "--skip-download", *sub_flags,
+            "--sub-format","vtt/srt",
+            "--sub-langs", subs_lang,
+            "-o", str(workdir / "%(id)s.%(ext)s"),
+            input_url
+        ]
+        try:
+            sh(cmd_vtt)
+        except Exception as e:
+            print(f"[WARN] Essai sous-titres avec client {cli} a échoué: {e}")
+            continue
+
+        found = sorted(workdir.glob("*.vtt"))
+        if found:
+            # Sélection préférentielle
+            pref = ["fr","fr-FR","fr-CA"]
+            chosen = None
+            for tag in pref:
+                for f in found:
+                    if tag.lower() in f.name.lower():
+                        chosen = f; break
+                if chosen: break
+            vtt_path = chosen or found[0]
+            break
+
+    if vtt_path is None:
+        print("[WARN] Sous-titres .vtt introuvables.")
+
+    # 3) Conversion audio en mono 16 kHz
+    out_wav = workdir / "audio_16k_mono.wav"
+    sh(["ffmpeg","-y","-i", str(wav_path), "-ac","1","-ar","16000", str(out_wav)])
+    print(f"[CHECK] Audio prêt: {out_wav}")
+
+    return str(out_wav), (str(vtt_path) if vtt_path else None), str(workdir)
