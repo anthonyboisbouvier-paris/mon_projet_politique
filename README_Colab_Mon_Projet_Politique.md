@@ -72,7 +72,7 @@ if req.exists():
 subprocess.run([sys.executable, "-m", "pip", "install", "-U", "yt-dlp", "webvtt-py"], check=True)
 
 # 3.3 optionnel: diarisation (pyannote)
-USE_DIARIZATION = False   # ← passez à True si vous voulez pyannote
+USE_DIARIZATION = True   # ← passez à True si vous voulez pyannote
 if USE_DIARIZATION:
     subprocess.run([sys.executable, "-m", "pip", "install", "-U", "pyannote.audio", "huggingface_hub"], check=True)
 
