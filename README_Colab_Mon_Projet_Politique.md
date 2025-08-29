@@ -83,7 +83,7 @@ print("✅ Dépendances installées")
 ```python
 # === Cellule 4 (option) — Définir le token Hugging Face pour la diarisation ===
 import os, getpass
-USE_DIARIZATION = False  # ← True si vous utilisez --num-speakers > 1
+USE_DIARIZATION = True  # ← True si vous utilisez --num-speakers > 1
 if USE_DIARIZATION:
     tok = getpass.getpass("HF token (scope Read): ").strip()
     if tok:
