@@ -255,6 +255,130 @@ print("✅ JSON (depuis VTT) →", OUT_JSON, "| utterances:", len(utts))
 ```
 ---
 
+
+# 🔁 Upload + validation + test du cookies.txt pour YouTube (Colab)
+# - Uploade ton fichier cookies.txt (format Netscape)
+# - Le place en /content/drive/MyDrive/mon_projet_politique/cookies.txt
+# - Valide le contenu (format, domaines, cookies clés, expirations)
+# - Teste avec yt-dlp -e sur une URL de test
+
+```
+---
+
+import os, shutil, subprocess, sys, time
+from pathlib import Path
+
+# 0) Paramètres
+TARGET = Path("/content/drive/MyDrive/mon_projet_politique/cookies.txt")
+TEST_URL = "https://www.youtube.com/watch?v=aEcVZw5g1Gg"  # change si tu veux
+
+# 1) Upload (si pas déjà présent)
+try:
+    from google.colab import files
+    NEED_UPLOAD = not TARGET.exists()
+    if NEED_UPLOAD:
+        print("📤 Sélectionne ton cookies.txt (format Netscape)…")
+        uploaded = files.upload()
+        if not uploaded:
+            raise SystemExit("❌ Aucun fichier uploadé.")
+        # Prendre le 1er fichier uploadé
+        local_name = list(uploaded.keys())[0]
+        src = Path(local_name)
+        TARGET.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(TARGET))
+        print(f"✅ Fichier déplacé vers: {TARGET}")
+    else:
+        print(f"ℹ️ Fichier déjà présent: {TARGET}")
+except Exception as e:
+    print("⚠️ Upload via Colab non disponible ou erreur d’upload:", e)
+    if not TARGET.exists():
+        raise SystemExit(f"❌ Fichier absent: {TARGET}. Uploade-le puis relance.")
+
+# 2) Vérifications de base
+print("\n🔎 Vérifications de base")
+if not TARGET.exists() or TARGET.stat().st_size == 0:
+    raise SystemExit("❌ cookies.txt introuvable ou vide.")
+
+head = TARGET.read_text(errors="ignore").splitlines()[:3]
+print("Premières lignes:", *head, sep="\n  ")
+if not head or "Netscape HTTP Cookie File" not in head[0]:
+    print("❌ Le fichier ne semble PAS être au format Netscape.")
+else:
+    print("✅ Format Netscape détecté")
+
+txt = TARGET.read_text(errors="ignore")
+has_yt = ".youtube.com" in txt
+has_gg = ".google.com" in txt
+print(f"Domaines .youtube.com: {has_yt} | .google.com: {has_gg}")
+if not (has_yt and has_gg):
+    print("⚠️ Conseil: exporte les cookies pour youtube **et** google (les deux).")
+
+must_have = {"SID","HSID","SSID","APISID","SAPISID","__Secure-1PSID","__Secure-3PSID","__Secure-1PAPISID","__Secure-3PAPISID","CONSENT","VISITOR_INFO1_LIVE"}
+present = {name for name in must_have if name in txt}
+missing = sorted(list(must_have - present))
+print("Cookies critiques présents:", sorted(list(present)))
+if missing:
+    print("⚠️ Potentiellement manquants:", missing)
+
+# 3) Analyse expiration (colonne 5 = timestamp UNIX ou 0 pour session)
+print("\n⌛ Analyse d’expiration")
+ok_count = exp_count = sess_count = 0
+for line in TARGET.read_text(errors="ignore").splitlines():
+    if not line or line.startswith("#"): 
+        continue
+    parts = line.split("\t")
+    if len(parts) < 7: 
+        continue
+    try:
+        exp = int(parts[4])
+    except:
+        exp = 0
+    if exp == 0:
+        sess_count += 1
+    else:
+        ok_count += 1 if exp > time.time() else 0
+        exp_count += 1 if exp <= time.time() else 0
+
+print(f"✅ Non-expirés: {ok_count} | ⏳ Expirés: {exp_count} | 💻 Session-only: {sess_count}")
+if exp_count > 0:
+    print("⚠️ Des cookies sont expirés. Regénère un export frais depuis le navigateur si possible.")
+
+# 4) Tester yt-dlp (mise à jour conseillée) + titre
+print("\n⬇️ Test yt-dlp -e avec cookies")
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", "yt-dlp"], check=False)
+
+cmd = ["yt-dlp", "--cookies", str(TARGET), "-4", "-e", TEST_URL]
+print("CMD:", " ".join(cmd))
+proc = subprocess.run(cmd, text=True, capture_output=True)
+stdout, stderr = proc.stdout.strip(), proc.stderr.strip()
+
+print("\n---- STDOUT ----")
+print(stdout or "(vide)")
+print("---- STDERR ----")
+print(stderr or "(vide)")
+print("Return code:", proc.returncode)
+
+# 5) Verdict & conseils
+print("\n🧭 Verdict")
+if proc.returncode == 0 and stdout:
+    print("✅ Cookies valides: yt-dlp a récupéré le titre de la vidéo.")
+else:
+    # Pattern d’erreurs fréquentes
+    if "no longer valid" in stderr.lower() or "not a bot" in stderr.lower():
+        print("❌ Cookies invalides ou rotation détectée côté YouTube.")
+        print("Conseils:")
+        print("  • Regénère un cookies.txt **juste après** t’être connecté à youtube.com (pas Studio).")
+        print("  • Accepte les consentements RGPD, puis exporte au format Netscape.")
+        print("  • Assure-toi d’avoir des lignes pour .youtube.com **et** .google.com, et le cookie CONSENT.")
+        print("  • Alternative robuste: exécute yt-dlp en **local** avec --cookies-from-browser, puis uploade l’audio.")
+    else:
+        print("❌ Échec du test yt-dlp avec cookies.")
+        print("Regarde STDERR ci-dessus; possible détection anti-bot des IP Colab.")
+        print("Alternative recommandée: faire le téléchargement en **local** puis envoyer l’audio au backend.")
+```
+---
+
+
 ## FAQ / Dépannage rapide
 
 - **403 YouTube / audio** : utilisez le **Plan B** (VTT → JSON). Vous pouvez aussi relancer la session pour changer d’IP.  
